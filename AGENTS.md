@@ -28,3 +28,6 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Application architecture
+- Build the business workspace with TanStack Start routes and shared React features; keep persistent operations behind Lovable Cloud RLS and atomic database functions so financial records and stock stay consistent.
