@@ -8,6 +8,20 @@
       "when": 1794899106119,
       "tag": "0000_create_rasi_automobile_business_core",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795051989416,
+      "tag": "0001_tighten_rasi_staff_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795052031593,
+      "tag": "0002_restrict_business_record_deletion",
+      "breakpoints": true
     }
   ]
 }
