@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, useContext, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   ArrowDownLeft, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpRight, BadgeIndianRupee,
@@ -97,8 +97,8 @@ function initialPayment(): PaymentForm {
 }
 
 export function RasiWorkspace() {
-  const context = useMemo(() => RasiAppContext, []);
-  const rasiApp = useRasiSession(context);
+  const rasiApp = useContext(RasiAppContext);
+  if (!rasiApp) throw new Error("Rasi user session is unavailable");
   const { user } = rasiApp;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -400,24 +400,4 @@ export function RasiWorkspace() {
       <div className="hidden"><span>{resumeSaleId ?? ""}</span><span>{todaysSales.length} completed sales today</span></div>
     </div>
   );
-}
-
-function useRasiSession(context: typeof RasiAppContext) {
-  const session = useContextBridge(context);
-  return session;
-}
-
-function useContextBridge(context: typeof RasiAppContext) {
-  const ReactApi = requireRasiReact();
-  const value = ReactApi.useContext(context);
-  if (!value) throw new Error("Rasi user session is unavailable");
-  return value;
-}
-
-function requireRasiReact() {
-  return { useContext: useRasiContext };
-}
-
-function useRasiContext<T>(context: { Provider: unknown; Consumer: unknown }) {
-  return context as unknown as T;
 }
