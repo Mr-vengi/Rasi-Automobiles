@@ -55,7 +55,7 @@ type Supplier = Tables<"suppliers">;
 type Sale = Awaited<ReturnType<typeof loadSales>>[number];
 type Purchase = Awaited<ReturnType<typeof loadPurchases>>[number];
 type NavItem = { id: Page; label: string; icon: IconComponent; permission?: string };
-type CartLine = { productId: string; quantity: number; discountRate: number };
+type CartLine = { productId: string; quantity: number; discountRate: number; product?: Product; productName?: string; partNumber?: string };
 type PaymentForm = { cash: string; upi: string; card: string; bank: string };
 
 const navItems: NavItem[] = [
@@ -397,7 +397,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         window.history.pushState(null, "", targetUrl);
       }
     }
-    if (next === "pos" && !resumeSaleId) {
+    if (next === "pos" && !preserveSelection && !resumeSaleId) {
       setCart([]);
       setPayment(initialPayment());
     }
@@ -486,7 +486,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         }
         return current.map((line) => line.productId === product.id ? { ...line, quantity: line.quantity + 1 } : line);
       }
-      return [...current, { productId: product.id, quantity: 1, discountRate: 0 }];
+      return [...current, { productId: product.id, quantity: 1, discountRate: 0, product }];
     });
   }
 
@@ -501,7 +501,18 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   });
 
   const cartRows = cart.map((line) => {
-    const product = products.find((item) => item.id === line.productId);
+    let product = products.find((item) => item.id === line.productId);
+    if (!product && line.product) {
+      product = line.product;
+    }
+    if (!product) {
+      product = products.find(
+        (p) =>
+          (line.productId && p.sku === line.productId) ||
+          (line.partNumber && p.part_number === line.partNumber) ||
+          (line.productName && p.product_name?.toLowerCase() === line.productName.toLowerCase())
+      );
+    }
     return { ...line, product };
   }).filter((line): line is typeof line & { product: Product } => Boolean(line.product));
 
@@ -517,7 +528,8 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   async function finishSale(status: "draft" | "completed") {
     if (cartRows.length === 0) { toast.error("Add a product to this bill first."); return; }
 
-    const effectiveGrandTotal = Math.round((totals.total + (extraCharge.enabled ? Number(extraCharge.amount) : 0)) * 100) / 100;
+    const exactTotal = totals.total + (extraCharge.enabled ? Number(extraCharge.amount) : 0);
+    const effectiveGrandTotal = Math.round(exactTotal);
     const tenderedTotal = Math.round(paidNow * 100) / 100;
     const changeReturn = Math.max(0, Math.round((tenderedTotal - effectiveGrandTotal) * 100) / 100);
     const appliedPaid = Math.min(effectiveGrandTotal, tenderedTotal);
@@ -602,33 +614,114 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   }
 
   async function resumeDraft(sale: Sale) {
-    let items = (sale.sale_items || [])
-      .filter((item: any) => Boolean(item.product_id))
-      .map((item: any) => ({
-        productId: item.product_id,
-        quantity: Number(item.quantity) || 1,
-        discountRate: Number(item.discount_rate) || 0,
-      }));
+    const rawItems = (sale as any).sale_items || (sale as any).items || [];
+    let items: CartLine[] = [];
+
+    if (Array.isArray(rawItems) && rawItems.length > 0) {
+      items = rawItems
+        .filter((item: any) => Boolean(item.product_id || item.productId || item.product_name))
+        .map((item: any) => {
+          const pid = item.product_id || item.productId || `prod-draft-${Date.now()}`;
+          const matched = products.find(
+            (p) =>
+              p.id === pid ||
+              (item.part_number && p.part_number === item.part_number) ||
+              (item.sku && p.sku === item.sku) ||
+              (item.product_name && p.product_name?.toLowerCase() === item.product_name.toLowerCase())
+          );
+          const fallbackProduct: Product = matched || {
+            id: pid,
+            business_id: RASI_BUSINESS_ID,
+            product_name: item.product_name || "Spare part",
+            sku: item.sku || item.part_number || "",
+            part_number: item.part_number || "",
+            oem_number: item.oem_number || "",
+            barcode: item.barcode || item.part_number || "",
+            brand_id: null,
+            brand_name: item.brand_name || "",
+            category_id: null,
+            category_name: item.category_name || "",
+            description: "",
+            unit: "Nos",
+            purchase_price: Number(item.unit_cost) || 0,
+            selling_price: Number(item.unit_price) || 0,
+            wholesale_price: Number(item.unit_price) || 0,
+            mrp: Number(item.mrp) || Number(item.unit_price) || 0,
+            gst_rate: Number(item.gst_rate) || 18,
+            hsn_code: item.hsn_code || "8708",
+            current_stock: 999,
+            minimum_stock: 0,
+            maximum_stock: null,
+            shelf_location: "",
+            supplier_id: null,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            archived_at: null,
+          };
+
+          return {
+            productId: matched ? matched.id : pid,
+            quantity: Number(item.quantity) || 1,
+            discountRate: Number(item.discount_rate) || 0,
+            product: fallbackProduct,
+            productName: item.product_name || "",
+            partNumber: item.part_number || "",
+          };
+        });
+    }
 
     // If items were not directly attached and sale.id is a UUID, try querying Supabase
     if (items.length === 0 && sale.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sale.id)) {
       try {
-        const { data } = await supabase.from("sale_items").select("product_id, quantity, discount_rate").eq("sale_id", sale.id);
+        const { data } = await supabase.from("sale_items").select("*").eq("sale_id", sale.id);
         if (data && data.length > 0) {
-          items = data
-            .filter((item): item is { product_id: string; quantity: number; discount_rate: number } => Boolean(item.product_id))
-            .map((item) => ({
+          items = data.map((item: any) => {
+            const matched = products.find((p) => p.id === item.product_id);
+            const fallbackProduct: Product = matched || {
+              id: item.product_id,
+              business_id: RASI_BUSINESS_ID,
+              product_name: item.product_name || "Spare part",
+              sku: item.part_number || "",
+              part_number: item.part_number || "",
+              oem_number: "",
+              barcode: "",
+              brand_id: null,
+              brand_name: "",
+              category_id: null,
+              category_name: "",
+              description: "",
+              unit: "Nos",
+              purchase_price: Number(item.unit_cost) || 0,
+              selling_price: Number(item.unit_price) || 0,
+              wholesale_price: Number(item.unit_price) || 0,
+              mrp: Number(item.unit_price) || 0,
+              gst_rate: Number(item.gst_rate) || 18,
+              hsn_code: item.hsn_code || "8708",
+              current_stock: 999,
+              minimum_stock: 0,
+              maximum_stock: null,
+              shelf_location: "",
+              supplier_id: null,
+              is_active: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              archived_at: null,
+            };
+            return {
               productId: item.product_id,
               quantity: Number(item.quantity) || 1,
               discountRate: Number(item.discount_rate) || 0,
-            }));
+              product: fallbackProduct,
+            };
+          });
         }
       } catch { }
     }
 
     setResumeSaleId(sale.id);
-    changePage("pos", true);
     setCart(items);
+    changePage("pos", true);
     setCustomerId(sale.customer_id ?? "walk-in");
     if (sale.customers) {
       setCustomerDetails({
@@ -644,6 +737,13 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         label: sale.extra_charge_label || "Auto Charge",
         amount: Number(sale.extra_charge_amount),
       });
+    } else {
+      setExtraCharge({ enabled: false, label: "Auto Charge", amount: 0 });
+    }
+    if (sale.is_interstate) {
+      setInterstate(true);
+    } else {
+      setInterstate(false);
     }
     toast.success(`Draft invoice ${sale.invoice_number || ""} loaded onto counter!`);
   }

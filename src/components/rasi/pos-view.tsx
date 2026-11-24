@@ -112,7 +112,9 @@ export function PosView({
     [customers, customerId]
   );
 
-  const effectiveTotal = Math.round((totals.total + (extraCharge.enabled ? Number(extraCharge.amount) : 0)) * 100) / 100;
+  const exactTotal = totals.total + (extraCharge.enabled ? Number(extraCharge.amount) : 0);
+  const effectiveTotal = Math.round(exactTotal);
+  const roundOff = Number((effectiveTotal - exactTotal).toFixed(2));
   const totalPaid = (Number(payment.cash) || 0) + (Number(payment.upi) || 0) + (Number(payment.card) || 0) + (Number(payment.bank) || 0);
   const changeReturn = Math.max(0, Math.round((totalPaid - effectiveTotal) * 100) / 100);
   const balanceDue = Math.max(0, Math.round((effectiveTotal - totalPaid) * 100) / 100);
@@ -606,6 +608,12 @@ export function PosView({
             <span>GST Tax ({interstate ? "IGST" : "CGST + SGST"}):</span>
             <span className="font-mono">₹{totals.taxAmount.toFixed(2)}</span>
           </div>
+          {Math.abs(roundOff) > 0.001 && (
+            <div className="flex justify-between text-muted-foreground text-xs font-medium">
+              <span>Round Off:</span>
+              <span className="font-mono">{roundOff > 0 ? `+₹${roundOff.toFixed(2)}` : `-₹${Math.abs(roundOff).toFixed(2)}`}</span>
+            </div>
+          )}
           <div className="flex justify-between border-t pt-2 text-base font-black text-foreground">
             <span>Grand Total:</span>
             <span className="font-mono text-primary">₹{effectiveTotal.toFixed(2)}</span>

@@ -206,6 +206,14 @@ export function InvoicePrinter({
   const extraChargeAmount = Number(sale.extra_charge_amount || 0);
   const extraChargeLabel = sale.extra_charge_label || "Auto Charge";
 
+  const exactBeforeRound = subtotal - discountAmount + (cgstAmount + sgstAmount + igstAmount) + extraChargeAmount;
+  const rawRoundOff = (sale as any).round_off;
+  const roundOffAmount = Number(
+    rawRoundOff !== undefined && rawRoundOff !== null
+      ? rawRoundOff
+      : (totalAmount - exactBeforeRound).toFixed(2)
+  );
+
   // Retrieve or compute tendered amount & change returned
   const tenderedAmount = Number(
     sale.tendered_amount ??
@@ -637,6 +645,11 @@ export function InvoicePrinter({
                         {extraChargeLabel || "Extra Charge"}: ₹{extraChargeAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </div>
                     )}
+                    {Math.abs(roundOffAmount) > 0.001 && (
+                      <div className="text-slate-700">
+                        Round Off: <span>{roundOffAmount > 0 ? `+₹${roundOffAmount.toFixed(2)}` : `-₹${Math.abs(roundOffAmount).toFixed(2)}`}</span>
+                      </div>
+                    )}
                     <div>Net Amount: <strong className="text-[11px]">₹{totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></div>
                     <div>Paid: <strong className="text-emerald-700">₹{paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></div>
                     {tenderedAmount > paidAmount && (
@@ -811,6 +824,12 @@ export function InvoicePrinter({
                 <span>GST Tax:</span>
                 <span>₹{(cgstAmount + sgstAmount + igstAmount).toFixed(2)}</span>
               </div>
+              {Math.abs(roundOffAmount) > 0.001 && (
+                <div className="flex justify-between text-slate-700">
+                  <span>Round Off:</span>
+                  <span>{roundOffAmount > 0 ? `+₹${roundOffAmount.toFixed(2)}` : `-₹${Math.abs(roundOffAmount).toFixed(2)}`}</span>
+                </div>
+              )}
               <div className="flex justify-between text-xs font-black border-t border-slate-900 pt-1">
                 <span>NET TOTAL:</span>
                 <span>₹{totalAmount.toFixed(2)}</span>
