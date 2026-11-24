@@ -6,7 +6,7 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles, UserCheck, Wrench, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles, UserCheck, Wrench, AlertCircle, User } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { auth } from "@/integrations/firebase/client";
@@ -388,17 +388,21 @@ function AuthPage() {
 
           <form onSubmit={(event) => void handleEmailAuth(event)} className="space-y-3.5">
             {mode === "signup" && (
-              <Field label="Your full name">
-                <Input
-                  autoComplete="name"
-                  required
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Staff Name / RANJITH SELVARAJ"
-                />
+              <Field label="Name">
+                <div className="relative">
+                  <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-10"
+                    autoComplete="name"
+                    required
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Name"
+                  />
+                </div>
               </Field>
             )}
-            <Field label="Email address">
+            <Field label="Email">
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -408,7 +412,7 @@ function AuthPage() {
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="ranjithselvaraj14@gmail.com"
+                  placeholder="Email"
                 />
               </div>
             </Field>
@@ -424,7 +428,7 @@ function AuthPage() {
                     minLength={6}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Enter your password"
+                    placeholder="Password"
                   />
                   <Button
                     variant="ghost"
