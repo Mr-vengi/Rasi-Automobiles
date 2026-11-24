@@ -25,6 +25,7 @@ import {
   fbRecordCustomerPayment,
   fbClearAllProducts,
   fbClearAllSales,
+  fbDeleteSale,
   fbLoadPurchases,
   fbReceivePurchase,
   fbLoadEmployees,
@@ -39,6 +40,7 @@ import {
 
 export {
   syncAllToFirebase,
+  fbDeleteSale,
   fbRegisterUserApproval,
   fbCheckUserApproval,
   fbLoadUserApprovals,

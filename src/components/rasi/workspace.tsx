@@ -25,7 +25,7 @@ import {
   loadPurchases, loadSales, loadSettings, loadSuppliers, receivePurchase,
   rasiKeys, saveBrand, saveCategory, saveCustomer, saveExpense, saveProduct,
   saveSupplier, updateSettings, syncAllToFirebase, deleteOrArchiveRecord,
-  clearAllProducts, clearAllSales,
+  clearAllProducts, clearAllSales, fbDeleteSale,
 } from "@/lib/rasi-data";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
@@ -581,6 +581,9 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
       setCustomerId("walk-in");
       setCustomerDetails({ name: "Walk-in Customer", phone: "", gstin: "", address: "" });
       setExtraCharge({ enabled: false, label: "Auto Charge", amount: 0 });
+      if (resumeSaleId && resumeSaleId !== saleId && status === "completed") {
+        void fbDeleteSale(resumeSaleId).catch(() => { });
+      }
       setResumeSaleId(null);
       await queryClient.refetchQueries({ queryKey: rasiKeys.sales });
       await queryClient.invalidateQueries({ queryKey: rasiKeys.all });
@@ -599,13 +602,50 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   }
 
   async function resumeDraft(sale: Sale) {
-    const { data, error } = await supabase.from("sale_items").select("product_id, quantity, discount_rate").eq("sale_id", sale.id);
-    if (error) { toast.error(error.message); return; }
-    setCart((data ?? []).filter((item): item is { product_id: string; quantity: number; discount_rate: number } => Boolean(item.product_id)).map((item) => ({ productId: item.product_id, quantity: Number(item.quantity), discountRate: Number(item.discount_rate) })));
-    setCustomerId(sale.customer_id ?? "walk-in");
+    let items = (sale.sale_items || [])
+      .filter((item: any) => Boolean(item.product_id))
+      .map((item: any) => ({
+        productId: item.product_id,
+        quantity: Number(item.quantity) || 1,
+        discountRate: Number(item.discount_rate) || 0,
+      }));
+
+    // If items were not directly attached and sale.id is a UUID, try querying Supabase
+    if (items.length === 0 && sale.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sale.id)) {
+      try {
+        const { data } = await supabase.from("sale_items").select("product_id, quantity, discount_rate").eq("sale_id", sale.id);
+        if (data && data.length > 0) {
+          items = data
+            .filter((item): item is { product_id: string; quantity: number; discount_rate: number } => Boolean(item.product_id))
+            .map((item) => ({
+              productId: item.product_id,
+              quantity: Number(item.quantity) || 1,
+              discountRate: Number(item.discount_rate) || 0,
+            }));
+        }
+      } catch { }
+    }
+
     setResumeSaleId(sale.id);
-    setPage("pos");
-    toast.message("Draft items loaded on counter.");
+    changePage("pos", true);
+    setCart(items);
+    setCustomerId(sale.customer_id ?? "walk-in");
+    if (sale.customers) {
+      setCustomerDetails({
+        name: sale.customers.customer_name || "Walk-in Customer",
+        phone: sale.customers.phone || "",
+        gstin: sale.customers.gstin || "",
+        address: sale.customers.billing_address || "",
+      });
+    }
+    if (sale.extra_charge_amount && Number(sale.extra_charge_amount) > 0) {
+      setExtraCharge({
+        enabled: true,
+        label: sale.extra_charge_label || "Auto Charge",
+        amount: Number(sale.extra_charge_amount),
+      });
+    }
+    toast.success(`Draft invoice ${sale.invoice_number || ""} loaded onto counter!`);
   }
 
   // Bulk import products handler

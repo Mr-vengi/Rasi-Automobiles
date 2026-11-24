@@ -650,6 +650,16 @@ export async function fbClearAllSales(): Promise<void> {
   }
 }
 
+export async function fbDeleteSale(saleId: string): Promise<void> {
+  memCache.sales = memCache.sales.filter((s) => s.id !== saleId);
+  persist("sales", memCache.sales);
+  try {
+    await withTimeout(deleteDoc(doc(db, "sales", saleId)), 2500, null);
+  } catch (err) {
+    console.warn("Firestore delete sale warning:", err);
+  }
+}
+
 export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
   try {
     const snap = await withTimeout(getDocs(collection(db, "customers")), 3500, null);
