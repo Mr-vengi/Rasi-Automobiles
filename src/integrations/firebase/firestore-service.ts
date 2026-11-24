@@ -1334,3 +1334,150 @@ export async function fbLoadEmployees(): Promise<any[]> {
   };
   return [defaultOwner];
 }
+
+export type UserApproval = {
+  id: string;
+  uid: string;
+  email: string;
+  name: string;
+  status: "pending" | "approved" | "rejected";
+  role: "staff" | "administrator";
+  requested_at: string;
+  approved_at?: string | null;
+  approved_by?: string | null;
+};
+
+export async function fbRegisterUserApproval(input: { uid: string; email: string; name: string }): Promise<void> {
+  const email = input.email.toLowerCase().trim();
+  const isAdmin = email === "ranjithselvaraj14@gmail.com";
+  const approvalRecord: UserApproval = {
+    id: input.uid || `user-${Date.now()}`,
+    uid: input.uid || "",
+    email,
+    name: input.name || email.split("@")[0] || "Staff",
+    status: isAdmin ? "approved" : "pending",
+    role: isAdmin ? "administrator" : "staff",
+    requested_at: new Date().toISOString(),
+    approved_at: isAdmin ? new Date().toISOString() : null,
+    approved_by: isAdmin ? "system" : null,
+  };
+
+  try {
+    await withTimeout(
+      setDoc(doc(db, "user_approvals", approvalRecord.id), approvalRecord, { merge: true }),
+      3000,
+      null
+    );
+  } catch (err) {
+    console.warn("Firestore register user approval err:", err);
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const existingRaw = localStorage.getItem("rasi_user_approvals");
+      const list: UserApproval[] = existingRaw ? JSON.parse(existingRaw) : [];
+      const updated = [approvalRecord, ...list.filter((u) => u.email !== email)];
+      localStorage.setItem("rasi_user_approvals", JSON.stringify(updated));
+    } catch {}
+  }
+}
+
+export async function fbCheckUserApproval(
+  email: string,
+  uid?: string
+): Promise<{ approved: boolean; status: "approved" | "pending" | "rejected"; role: string }> {
+  const cleanEmail = email.toLowerCase().trim();
+  if (cleanEmail === "ranjithselvaraj14@gmail.com") {
+    return { approved: true, status: "approved", role: "administrator" };
+  }
+
+  try {
+    if (uid) {
+      const snap = await withTimeout(getDoc(doc(db, "user_approvals", uid)), 3000, null);
+      if (snap && snap.exists()) {
+        const data = snap.data() as UserApproval;
+        return { approved: data.status === "approved", status: data.status, role: data.role || "staff" };
+      }
+    }
+
+    const q = query(collection(db, "user_approvals"), where("email", "==", cleanEmail));
+    const querySnap = await withTimeout(getDocs(q), 3000, null);
+    if (querySnap && !querySnap.empty && querySnap.docs[0]) {
+      const data = querySnap.docs[0].data() as UserApproval;
+      return { approved: data.status === "approved", status: data.status, role: data.role || "staff" };
+    }
+  } catch (err) {
+    console.warn("Firestore check user approval err:", err);
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const existingRaw = localStorage.getItem("rasi_user_approvals");
+      if (existingRaw) {
+        const list: UserApproval[] = JSON.parse(existingRaw);
+        const match = list.find((u) => u.email.toLowerCase() === cleanEmail || (uid && u.uid === uid));
+        if (match) {
+          return { approved: match.status === "approved", status: match.status, role: match.role || "staff" };
+        }
+      }
+    } catch {}
+  }
+
+  return { approved: false, status: "pending", role: "staff" };
+}
+
+export async function fbLoadUserApprovals(): Promise<UserApproval[]> {
+  try {
+    const snap = await withTimeout(getDocs(collection(db, "user_approvals")), 3000, null);
+    if (snap && !snap.empty) {
+      const list = snap.docs.map((d) => d.data() as UserApproval);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("rasi_user_approvals", JSON.stringify(list));
+      }
+      return list;
+    }
+  } catch (err) {
+    console.warn("Firestore load user approvals warning:", err);
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const existing = localStorage.getItem("rasi_user_approvals");
+      if (existing) return JSON.parse(existing);
+    } catch {}
+  }
+  return [];
+}
+
+export async function fbSetUserApprovalStatus(
+  idOrUid: string,
+  status: "approved" | "rejected"
+): Promise<void> {
+  const updateData = {
+    status,
+    approved_at: status === "approved" ? new Date().toISOString() : null,
+    approved_by: "ranjithselvaraj14@gmail.com",
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    await withTimeout(
+      setDoc(doc(db, "user_approvals", idOrUid), updateData, { merge: true }),
+      3000,
+      null
+    );
+  } catch (err) {
+    console.warn("Firestore update user approval status warning:", err);
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const existingRaw = localStorage.getItem("rasi_user_approvals");
+      if (existingRaw) {
+        const list: UserApproval[] = JSON.parse(existingRaw);
+        const updated = list.map((u) => (u.id === idOrUid || u.uid === idOrUid ? { ...u, ...updateData } : u));
+        localStorage.setItem("rasi_user_approvals", JSON.stringify(updated));
+      }
+    } catch {}
+  }
+}

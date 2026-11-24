@@ -98,33 +98,62 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  const isOwnerAdmin =
+    (user.email || "").toLowerCase().trim() === "ranjithselvaraj14@gmail.com" ||
+    user.roleId === "administrator" ||
+    user.roleId === "admin" ||
+    user.roleId === "owner";
+
   const [page, setPage] = useState<Page>(() => {
-    if (initialPage) return initialPage;
+    if (initialPage) {
+      if (!isOwnerAdmin && !["pos", "products", "inventory"].includes(initialPage)) return "pos";
+      return initialPage;
+    }
     if (typeof window !== "undefined") {
       const path = window.location.pathname.replace(/^\/_authenticated/, "").replace(/^\//, "");
       const validPages: Page[] = ["dashboard", "pos", "sales", "products", "inventory", "purchases", "customers", "suppliers", "expenses", "reports", "employees", "settings"];
-      if (validPages.includes(path as Page)) return path as Page;
+      if (validPages.includes(path as Page)) {
+        if (!isOwnerAdmin && !["pos", "products", "inventory"].includes(path)) return "pos";
+        return path as Page;
+      }
     }
-    return "dashboard";
+    return isOwnerAdmin ? "dashboard" : "pos";
   });
 
   useEffect(() => {
     if (initialPage) {
-      setPage(initialPage);
+      if (!isOwnerAdmin && !["pos", "products", "inventory"].includes(initialPage)) {
+        setPage("pos");
+      } else {
+        setPage(initialPage);
+      }
     }
-  }, [initialPage]);
+  }, [initialPage, isOwnerAdmin]);
+
+  useEffect(() => {
+    if (!isOwnerAdmin && !["pos", "products", "inventory"].includes(page)) {
+      setPage("pos");
+      if (typeof window !== "undefined" && window.location.pathname !== "/pos") {
+        window.history.replaceState(null, "", "/pos");
+      }
+    }
+  }, [isOwnerAdmin, page]);
 
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/_authenticated/, "").replace(/^\//, "");
       const validPages: Page[] = ["dashboard", "pos", "sales", "products", "inventory", "purchases", "customers", "suppliers", "expenses", "reports", "employees", "settings"];
       if (validPages.includes(path as Page)) {
-        setPage(path as Page);
+        if (!isOwnerAdmin && !["pos", "products", "inventory"].includes(path)) {
+          setPage("pos");
+        } else {
+          setPage(path as Page);
+        }
       }
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [isOwnerAdmin]);
   const [searchText, setSearchText] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [dialog, setDialog] = useState<string | null>(null);
@@ -207,14 +236,16 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   const expenses = expensesQuery.data ?? [];
   const settings = settingsQuery.data;
 
-  const isOwnerAdmin = user.roleId === "administrator" || user.roleId === "admin" || user.roleId === "owner";
   const effectiveOwnerName = settings?.owner_name?.trim() || "RANJITH SELVARAJ";
   const displayUserName = isOwnerAdmin
     ? effectiveOwnerName
     : user.fullName.replace(/\s*\([^)]*\)/g, "").trim();
   const displayUserInitials = (displayUserName.charAt(0) || "R").toUpperCase();
 
-  const enabledNav = navItems.filter((item) => !item.permission || has(item.permission));
+  // For other users (staff), only show product, inventory, and new bill
+  const enabledNav = isOwnerAdmin
+    ? navItems
+    : navItems.filter((item) => ["pos", "products", "inventory"].includes(item.id));
   const lowStock = products.filter((product) =>
     ["critical", "low", "out-of-stock"].includes(
       getStockStatus(Number(product.current_stock), Number(product.minimum_stock), product.maximum_stock === null ? null : Number(product.maximum_stock))
@@ -350,6 +381,9 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   }
 
   function changePage(next: Page, preserveSelection = false) {
+    if (!isOwnerAdmin && !["pos", "products", "inventory"].includes(next)) {
+      next = "pos";
+    }
     setPage(next);
     setSearchText("");
     setMobileNavOpen(false);
@@ -646,7 +680,10 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         <div className="border-t border-sidebar-border p-3">
           <div className="flex items-center gap-2.5 rounded-md p-2.5">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">{displayUserInitials}</div>
-            <div className="min-w-0 flex-1"><p className="truncate text-xs font-medium text-sidebar-foreground">{displayUserName}</p><p className="mt-0.5 truncate text-[10px] capitalize text-sidebar-foreground/55">{user.roleId.replaceAll("_", " ")}</p></div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-sidebar-foreground">{displayUserName}</p>
+              <p className="mt-0.5 truncate text-[10px] capitalize text-sidebar-foreground/55">{isOwnerAdmin ? "Administrator" : "Counter Staff"}</p>
+            </div>
             <Button variant="ghost" size="icon" className="size-8 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground" aria-label="Sign out" title="Sign out" onClick={() => void signOut()}><LogOut /></Button>
           </div>
         </div>

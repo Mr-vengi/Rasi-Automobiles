@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { auth } from "@/integrations/firebase/client";
 import { RasiAppContext, type RasiSession } from "@/components/rasi/app-context";
+import { fbCheckUserApproval } from "@/lib/rasi-data";
 
 const FULL_ADMIN_PERMISSIONS = [
   "dashboard:read",
@@ -46,6 +47,13 @@ const FULL_ADMIN_PERMISSIONS = [
   "settings:manage",
 ];
 
+const STAFF_PERMISSIONS = [
+  "pos:access",
+  "sales:create",
+  "products:read",
+  "inventory:read",
+];
+
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
@@ -72,16 +80,40 @@ export const Route = createFileRoute("/_authenticated")({
       }
       if (auth.currentUser) {
         const fbUser = auth.currentUser;
+        const email = (fbUser.email || "").toLowerCase().trim();
+        const isAdmin = email === "ranjithselvaraj14@gmail.com";
+
+        if (!isAdmin) {
+          const approval = await fbCheckUserApproval(email, fbUser.uid);
+          if (!approval.approved) {
+            await auth.signOut();
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("rasi_staff_session");
+            }
+            throw redirect({ to: "/auth" });
+          }
+
+          const user: RasiSession = {
+            userId: fbUser.uid,
+            email: fbUser.email ?? "",
+            fullName: fbUser.displayName || email.split("@")[0] || "Staff",
+            roleId: "staff",
+            permissions: STAFF_PERMISSIONS,
+          };
+          return { user };
+        }
+
         const user: RasiSession = {
           userId: fbUser.uid,
-          email: fbUser.email ?? "owner@rasiautomobiles.com",
-          fullName: fbUser.displayName || fbUser.email?.split("@")[0] || activeOwner,
+          email: "ranjithselvaraj14@gmail.com",
+          fullName: fbUser.displayName || activeOwner,
           roleId: "administrator",
           permissions: FULL_ADMIN_PERMISSIONS,
         };
         return { user };
       }
     } catch (err) {
+      if (err && typeof err === "object" && "to" in err) throw err;
       console.warn("Firebase auth check skipped:", err);
     }
 
@@ -92,13 +124,26 @@ export const Route = createFileRoute("/_authenticated")({
         try {
           const parsed = JSON.parse(saved);
           if (parsed && parsed.userId) {
-            if (
-              (parsed.roleId === "administrator" || parsed.roleId === "admin" || parsed.roleId === "owner") &&
-              (parsed.fullName?.includes("(") || parsed.fullName?.includes("Venkatesh") || !parsed.fullName)
-            ) {
-              parsed.fullName = activeOwner;
+            const email = (parsed.email || "").toLowerCase().trim();
+            const isAdmin =
+              email === "ranjithselvaraj14@gmail.com" ||
+              parsed.roleId === "administrator" ||
+              parsed.roleId === "admin" ||
+              parsed.roleId === "owner";
+
+            if (isAdmin) {
+              parsed.roleId = "administrator";
+              parsed.permissions = FULL_ADMIN_PERMISSIONS;
+              if (parsed.fullName?.includes("(") || parsed.fullName?.includes("Venkatesh") || !parsed.fullName) {
+                parsed.fullName = activeOwner;
+              }
               localStorage.setItem("rasi_staff_session", JSON.stringify(parsed));
+              return { user: parsed as RasiSession };
             }
+
+            // Staff session
+            parsed.roleId = "staff";
+            parsed.permissions = STAFF_PERMISSIONS;
             return { user: parsed as RasiSession };
           }
         } catch {
@@ -111,28 +156,37 @@ export const Route = createFileRoute("/_authenticated")({
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (!authError && authData?.user) {
+        const email = (authData.user.email || "").toLowerCase().trim();
+        const isAdmin = email === "ranjithselvaraj14@gmail.com";
+
+        if (isAdmin) {
+          const user: RasiSession = {
+            userId: authData.user.id,
+            email: authData.user.email ?? "ranjithselvaraj14@gmail.com",
+            fullName: activeOwner,
+            roleId: "administrator",
+            permissions: FULL_ADMIN_PERMISSIONS,
+          };
+          return { user };
+        }
+
         const [{ data: profile }, { data: roles }] = await Promise.all([
           supabase.from("profiles").select("id, full_name, email").eq("id", authData.user.id).maybeSingle(),
           supabase.from("user_roles").select("role_id").eq("user_id", authData.user.id),
         ]);
 
         const roleIds = (roles ?? []).map((role) => role.role_id);
-        const { data: permissions } = roleIds.length
-          ? await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds)
-          : { data: [] as { permission_id: string }[] };
-
         const user: RasiSession = {
           userId: authData.user.id,
           email: authData.user.email ?? "",
-          fullName: profile?.full_name || profile?.email || "Team member",
-          roleId: roleIds[0] ?? "administrator",
-          permissions: permissions && permissions.length
-            ? [...new Set(permissions.map((p) => p.permission_id))]
-            : FULL_ADMIN_PERMISSIONS,
+          fullName: profile?.full_name || profile?.email || "Staff Member",
+          roleId: "staff",
+          permissions: STAFF_PERMISSIONS,
         };
         return { user };
       }
     } catch (err) {
+      if (err && typeof err === "object" && "to" in err) throw err;
       console.warn("Supabase auth check error:", err);
     }
 

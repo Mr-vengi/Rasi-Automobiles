@@ -6,7 +6,7 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles, UserCheck, Wrench } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles, UserCheck, Wrench, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { auth } from "@/integrations/firebase/client";
@@ -14,6 +14,29 @@ import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import partsShop from "@/assets/rasi-parts-shop.jpg";
+import { fbRegisterUserApproval, fbCheckUserApproval } from "@/lib/rasi-data";
+
+const FULL_ADMIN_PERMISSIONS = [
+  "dashboard:read",
+  "pos:access",
+  "sales:read", "sales:create", "sales:update", "sales:cancel", "sales:export",
+  "products:read", "products:create", "products:update", "products:delete", "products:archive", "products:import", "products:export",
+  "inventory:read", "inventory:adjust", "inventory:alerts",
+  "purchases:read", "purchases:create", "purchases:receive", "purchases:export",
+  "customers:read", "customers:create", "customers:update", "customers:delete", "customers:archive", "customers:ledger",
+  "suppliers:read", "suppliers:create", "suppliers:update", "suppliers:delete", "suppliers:archive", "suppliers:ledger",
+  "expenses:read", "expenses:create", "expenses:delete",
+  "reports:read", "reports:export",
+  "employees:manage",
+  "settings:manage",
+];
+
+const STAFF_PERMISSIONS = [
+  "pos:access",
+  "sales:create",
+  "products:read",
+  "inventory:read",
+];
 
 export const Route = createFileRoute("/auth")({
   beforeLoad: async () => {
@@ -24,13 +47,38 @@ export const Route = createFileRoute("/auth")({
           new Promise((resolve) => setTimeout(resolve, 1500)),
         ]);
       }
-      if (auth.currentUser) throw redirect({ to: "/dashboard" });
+      if (auth.currentUser) {
+        const email = auth.currentUser.email?.toLowerCase().trim() || "";
+        const isAdmin = email === "ranjithselvaraj14@gmail.com";
+        if (isAdmin) throw redirect({ to: "/dashboard" });
+
+        const approval = await fbCheckUserApproval(email, auth.currentUser.uid);
+        if (approval.approved) {
+          throw redirect({ to: "/pos" });
+        } else {
+          await auth.signOut();
+        }
+      }
     } catch (e) {
       if (e && typeof e === "object" && "to" in e) throw e;
     }
 
-    if (typeof window !== "undefined" && localStorage.getItem("rasi_staff_session")) {
-      throw redirect({ to: "/dashboard" });
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("rasi_staff_session");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const isAdmin =
+            parsed.roleId === "administrator" ||
+            parsed.roleId === "admin" ||
+            parsed.roleId === "owner" ||
+            parsed.email?.toLowerCase() === "ranjithselvaraj14@gmail.com";
+          throw redirect({ to: isAdmin ? "/dashboard" : "/pos" });
+        } catch (e) {
+          if (e && typeof e === "object" && "to" in e) throw e;
+          localStorage.removeItem("rasi_staff_session");
+        }
+      }
     }
 
     try {
@@ -61,6 +109,7 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.add("auth-screen");
@@ -70,120 +119,156 @@ function AuthPage() {
   async function handleEmailAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
-    const cleanEmail = email.trim();
+    setPendingNotice(null);
+    const cleanEmail = email.trim().toLowerCase();
 
     try {
+      // 1. FORGOT PASSWORD MODE
       if (mode === "forgot") {
+        if (!cleanEmail) {
+          toast.error("Please enter your email address.");
+          setBusy(false);
+          return;
+        }
+
         try {
           await sendPasswordResetEmail(auth, cleanEmail);
-        } catch {
-          await supabase.auth.resetPasswordForEmail(cleanEmail, {
-            redirectTo: `${window.location.origin}/auth`,
-          });
+          toast.success(`Password reset email sent to ${cleanEmail}! Please check your inbox or spam folder.`);
+          setMode("signin");
+          return;
+        } catch (err: any) {
+          if (err.code === "auth/user-not-found") {
+            toast.error("No account found with this email. Please check the email or create an account.");
+          } else if (err.code === "auth/invalid-email") {
+            toast.error("Please enter a valid email address.");
+          } else {
+            toast.error(err.message || "Failed to send reset email. Please try again.");
+          }
+          return;
         }
-        toast.success("Password reset instructions sent. Check your email.");
-        setMode("signin");
-        return;
       }
 
+      // 2. SIGN UP (CREATE ACCOUNT) MODE
       if (mode === "signup") {
+        const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
+
         try {
           const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
           if (name.trim()) {
             await updateProfile(cred.user, { displayName: name.trim() });
           }
-          toast.success("Account created successfully!");
-          await navigate({ to: "/dashboard" });
-          return;
-        } catch (fbErr: any) {
-          if (fbErr.code === "auth/email-already-in-use") {
-            const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
-            toast.success("Welcome back!");
+
+          if (isAdmin) {
+            // Admin is pre-approved
+            await fbRegisterUserApproval({ uid: cred.user.uid, email: cleanEmail, name: name.trim() || "RANJITH SELVARAJ" });
+            const adminStaff = {
+              userId: cred.user.uid,
+              email: cleanEmail,
+              fullName: "RANJITH SELVARAJ",
+              roleId: "administrator",
+              permissions: FULL_ADMIN_PERMISSIONS,
+            };
+            localStorage.setItem("rasi_staff_session", JSON.stringify(adminStaff));
+            toast.success("Administrator account created! Welcome RANJITH SELVARAJ.");
             await navigate({ to: "/dashboard" });
             return;
           }
-          // Fall back to Supabase
-          const { data, error } = await supabase.auth.signUp({
-            email: cleanEmail,
-            password,
-            options: {
-              emailRedirectTo: window.location.origin,
-              data: { full_name: name.trim() },
-            },
-          });
-          if (error) throw error;
-          if (!data.session) {
-            toast.success("Account created. Please sign in.");
+
+          // Other users: register approval request and sign out immediately
+          await fbRegisterUserApproval({ uid: cred.user.uid, email: cleanEmail, name: name.trim() });
+          await auth.signOut();
+          localStorage.removeItem("rasi_staff_session");
+
+          setPendingNotice(
+            `Account request submitted for ${cleanEmail}! A notification has been sent to administrator (ranjithselvaraj14@gmail.com). You will be able to sign in once the admin approves your account.`
+          );
+          toast.success("Account created! Awaiting administrator approval before sign in.");
+          setMode("signin");
+          setPassword("");
+          return;
+        } catch (fbErr: any) {
+          if (fbErr.code === "auth/email-already-in-use") {
+            toast.error("An account with this email already exists. Please sign in instead.");
             setMode("signin");
             return;
           }
+          throw fbErr;
         }
-      } else {
-        // Sign in mode: Try Firebase first
+      }
+
+      // 3. SIGN IN MODE
+      const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
+
+      if (isAdmin) {
+        // ADMIN LOGIN
         try {
           await signInWithEmailAndPassword(auth, cleanEmail, password);
-          toast.success("Signed in successfully to Rasi Automobiles!");
-          await navigate({ to: "/dashboard" });
-          return;
         } catch (fbErr: any) {
-          // If not in Firebase yet, try Supabase
-          const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
-          if (error) {
-            // If neither worked, provide clear message
-            throw new Error(fbErr.message || error.message);
+          if (fbErr.code === "auth/user-not-found") {
+            // First time setup: auto-provision admin account
+            const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+            await updateProfile(cred.user, { displayName: "RANJITH SELVARAJ" });
+            await fbRegisterUserApproval({ uid: cred.user.uid, email: cleanEmail, name: "RANJITH SELVARAJ" });
+          } else if (fbErr.code === "auth/wrong-password" || fbErr.code === "auth/invalid-credential") {
+            throw new Error("Incorrect password for Administrator. Please try again or use 'Forgot password?'.");
+          } else {
+            throw fbErr;
           }
+        }
+
+        const adminStaff = {
+          userId: auth.currentUser?.uid || "admin-ranjith-01",
+          email: "ranjithselvaraj14@gmail.com",
+          fullName: "RANJITH SELVARAJ",
+          roleId: "administrator",
+          permissions: FULL_ADMIN_PERMISSIONS,
+        };
+        localStorage.setItem("rasi_staff_session", JSON.stringify(adminStaff));
+        toast.success("Signed in as Administrator: RANJITH SELVARAJ");
+        await navigate({ to: "/dashboard" });
+        return;
+      }
+
+      // OTHER STAFF LOGIN: Requires Admin Approval
+      let userUid = "";
+      try {
+        const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+        userUid = cred.user.uid;
+      } catch (fbErr: any) {
+        if (fbErr.code === "auth/user-not-found") {
+          throw new Error("No staff account found with this email. Please click 'Create an account' first.");
+        } else if (fbErr.code === "auth/wrong-password" || fbErr.code === "auth/invalid-credential") {
+          throw new Error("Incorrect password. Please verify your credentials or click 'Forgot password?'.");
+        } else {
+          throw fbErr;
         }
       }
 
-      await navigate({ to: "/dashboard" });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not sign in. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleQuickAccess() {
-    setBusy(true);
-    try {
-      let activeOwner = "RANJITH SELVARAJ";
-      if (typeof window !== "undefined") {
-        try {
-          const s = localStorage.getItem("rasi_settings");
-          if (s) {
-            const parsed = JSON.parse(s);
-            if (parsed?.owner_name && parsed.owner_name !== "K. Venkatesh") {
-              activeOwner = parsed.owner_name;
-            }
-          }
-        } catch { }
+      // Verify approval status
+      const approval = await fbCheckUserApproval(cleanEmail, userUid);
+      if (!approval.approved) {
+        await auth.signOut();
+        localStorage.removeItem("rasi_staff_session");
+        setPendingNotice(
+          "Your account is currently pending approval by administrator (ranjithselvaraj14@gmail.com). You will receive access once approved."
+        );
+        toast.error("Account pending approval from admin ranjithselvaraj14@gmail.com.", { duration: 8000 });
+        return;
       }
 
-      const defaultStaff = {
-        userId: "owner-ranjith-01",
-        email: "ranjithselvaraj14@gmail.com",
-        fullName: `${activeOwner}`,
-        roleId: "administrator",
-        permissions: [
-          "dashboard:read",
-          "pos:access",
-          "sales:read", "sales:create", "sales:update", "sales:cancel", "sales:export",
-          "products:read", "products:create", "products:update", "products:delete", "products:import", "products:export",
-          "inventory:read", "inventory:adjust", "inventory:alerts",
-          "purchases:read", "purchases:create", "purchases:receive", "purchases:export",
-          "customers:read", "customers:create", "customers:update", "customers:ledger",
-          "suppliers:read", "suppliers:create", "suppliers:update", "suppliers:ledger",
-          "expenses:read", "expenses:create", "expenses:delete",
-          "reports:read", "reports:export",
-          "employees:manage",
-          "settings:manage",
-        ],
+      // Approved staff login: only gets products, inventory, new bill
+      const staffSession = {
+        userId: userUid,
+        email: cleanEmail,
+        fullName: auth.currentUser?.displayName || cleanEmail.split("@")[0] || "Staff Member",
+        roleId: "staff",
+        permissions: STAFF_PERMISSIONS,
       };
-      localStorage.setItem("rasi_staff_session", JSON.stringify(defaultStaff));
-      toast.success(`Signed in as Administrator: ${activeOwner}`);
-      await navigate({ to: "/dashboard" });
-    } catch {
-      toast.error("Could not sign in.");
+      localStorage.setItem("rasi_staff_session", JSON.stringify(staffSession));
+      toast.success(`Signed in as Counter Staff: ${staffSession.fullName}`);
+      await navigate({ to: "/pos" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not sign in. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -200,9 +285,9 @@ function AuthPage() {
 
   const title = mode === "signup" ? "Create your workspace access" : mode === "forgot" ? "Reset your password" : "Welcome back";
   const description = mode === "signup"
-    ? "Request a staff account for your business."
+    ? "Request a staff account (requires admin approval by ranjithselvaraj14@gmail.com)."
     : mode === "forgot"
-      ? "We'll send you a secure reset link."
+      ? "Enter your email to receive a secure reset link."
       : "Sign in to continue to Rasi Automobiles.";
 
   return (
@@ -242,20 +327,16 @@ function AuthPage() {
             <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
           </div>
 
-          {/* Quick Staff Access Button */}
-          <div className="mb-5 rounded-lg border border-primary/20 bg-primary/5 p-3.5">
-            <p className="text-xs font-semibold text-primary">Fast Counter Access</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Sign in immediately as Administrator without password.</p>
-            <Button
-              type="button"
-              variant="default"
-              disabled={busy}
-              onClick={() => void handleQuickAccess()}
-              className="mt-2.5 h-10 w-full justify-center gap-2 font-semibold shadow-sm"
-            >
-              <UserCheck className="size-4" /> Quick Sign In as Owner / Admin
-            </Button>
-          </div>
+          {/* Pending Approval Notice Banner if applicable */}
+          {pendingNotice && (
+            <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50/80 p-3.5 text-xs text-amber-900 shadow-xs dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <AlertCircle className="size-4 shrink-0 text-amber-600 mt-0.5" />
+              <div>
+                <p className="font-semibold">Notice for Staff Accounts</p>
+                <p className="mt-0.5 leading-relaxed">{pendingNotice}</p>
+              </div>
+            </div>
+          )}
 
           {mode !== "forgot" && (
             <div className="space-y-2.5">
@@ -284,7 +365,7 @@ function AuthPage() {
                   required
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="RANJITH SELVARAJ"
+                  placeholder="Staff Name / RANJITH SELVARAJ"
                 />
               </Field>
             )}
@@ -298,7 +379,7 @@ function AuthPage() {
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="owner@rasiautomobiles.com"
+                  placeholder="ranjithselvaraj14@gmail.com"
                 />
               </div>
             </Field>
@@ -314,7 +395,7 @@ function AuthPage() {
                     minLength={6}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder="Enter your password"
                   />
                   <Button
                     variant="ghost"
@@ -335,31 +416,37 @@ function AuthPage() {
                   variant="link"
                   size="sm"
                   type="button"
-                  onClick={() => setMode("forgot")}
-                  className="h-auto p-0 text-xs font-medium text-primary"
+                  onClick={() => {
+                    setPendingNotice(null);
+                    setMode("forgot");
+                  }}
+                  className="h-auto p-0 text-xs font-medium text-primary hover:underline"
                 >
                   Forgot password?
                 </Button>
               </div>
             )}
-            <Button type="submit" disabled={busy} className="mt-2 h-11 w-full">
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}
+            <Button type="submit" disabled={busy} className="mt-2 h-11 w-full font-bold">
+              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create staff account" : "Send password reset link"}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            {mode === "signup" ? "Already have access?" : mode === "forgot" ? "Remembered password?" : "Need a new account?"}{" "}
+            {mode === "signup" ? "Already have access?" : mode === "forgot" ? "Remembered your password?" : "Need a new account?"}{" "}
             <Button
               variant="link"
               type="button"
-              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-              className="h-auto p-0 text-xs font-semibold text-primary"
+              onClick={() => {
+                setPendingNotice(null);
+                setMode(mode === "signin" ? "signup" : "signin");
+              }}
+              className="h-auto p-0 text-xs font-semibold text-primary hover:underline"
             >
               {mode === "signin" ? "Create an account" : "Back to sign in"}
             </Button>
           </p>
           <div className="mt-8 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
-            <LockKeyhole className="size-3" /> Secure backend persistence powered by Firebase (rasiautomobile).
+            <LockKeyhole className="size-3" /> Secure admin authorization & role access (rasiautomobile).
           </div>
         </div>
       </section>

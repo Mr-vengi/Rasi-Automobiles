@@ -28,11 +28,24 @@ import {
   fbLoadPurchases,
   fbReceivePurchase,
   fbLoadEmployees,
+  fbRegisterUserApproval,
+  fbCheckUserApproval,
+  fbLoadUserApprovals,
+  fbSetUserApprovalStatus,
+  type UserApproval,
   syncAllToFirebase,
   type FirebaseSyncResult,
 } from "@/integrations/firebase/firestore-service";
 
-export { syncAllToFirebase, type FirebaseSyncResult };
+export {
+  syncAllToFirebase,
+  fbRegisterUserApproval,
+  fbCheckUserApproval,
+  fbLoadUserApprovals,
+  fbSetUserApprovalStatus,
+  type UserApproval,
+  type FirebaseSyncResult,
+};
 
 export const rasiKeys = {
   all: ["rasi"] as const,
