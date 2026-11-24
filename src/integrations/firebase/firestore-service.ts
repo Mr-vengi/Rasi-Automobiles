@@ -1504,6 +1504,77 @@ export async function fbAuthenticateFallback(
   };
 }
 
+export async function fbResetUserPassword(
+  email: string,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  const cleanEmail = email.toLowerCase().trim();
+  const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
+
+  let record: UserApproval | null = null;
+  let recordDocId = "";
+
+  try {
+    const q = query(collection(db, "user_approvals"), where("email", "==", cleanEmail));
+    const querySnap = await withTimeout(getDocs(q), 3000, null);
+    if (querySnap && !querySnap.empty && querySnap.docs[0]) {
+      recordDocId = querySnap.docs[0].id;
+      record = querySnap.docs[0].data() as UserApproval;
+    }
+  } catch {}
+
+  if (!record && typeof window !== "undefined") {
+    try {
+      const existingRaw = localStorage.getItem("rasi_user_approvals");
+      if (existingRaw) {
+        const list: UserApproval[] = JSON.parse(existingRaw);
+        record = list.find((u) => u.email.toLowerCase() === cleanEmail) || null;
+      }
+    } catch {}
+  }
+
+  const now = new Date().toISOString();
+  const targetId = recordDocId || record?.id || (isAdmin ? "admin-ranjith-01" : `usr-${Date.now()}`);
+
+  const updatedRecord: UserApproval = {
+    id: targetId,
+    uid: targetId,
+    email: cleanEmail,
+    name: record?.name || (isAdmin ? "RANJITH SELVARAJ" : cleanEmail.split("@")[0] || "Staff"),
+    password: newPassword,
+    status: isAdmin ? "approved" : (record?.status || "pending"),
+    role: isAdmin ? "administrator" : (record?.role || "staff"),
+    requested_at: record?.requested_at || now,
+    approved_at: isAdmin ? now : record?.approved_at || null,
+    approved_by: isAdmin ? "system" : record?.approved_by || null,
+  };
+
+  try {
+    await withTimeout(
+      setDoc(doc(db, "user_approvals", targetId), updatedRecord, { merge: true }),
+      3500,
+      null
+    );
+  } catch (err) {
+    console.warn("Firestore reset password notice:", err);
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const existingRaw = localStorage.getItem("rasi_user_approvals");
+      let list: UserApproval[] = existingRaw ? JSON.parse(existingRaw) : [];
+      list = list.filter((u) => u.email.toLowerCase() !== cleanEmail);
+      list.push(updatedRecord);
+      localStorage.setItem("rasi_user_approvals", JSON.stringify(list));
+    } catch {}
+  }
+
+  return {
+    success: true,
+    message: `Password reset successfully for ${cleanEmail}!`,
+  };
+}
+
 export async function fbLoadUserApprovals(): Promise<UserApproval[]> {
   try {
     const snap = await withTimeout(getDocs(collection(db, "user_approvals")), 3000, null);

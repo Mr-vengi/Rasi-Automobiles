@@ -5,16 +5,17 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup,
 } from "firebase/auth";
 import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles, UserCheck, Wrench, AlertCircle, User } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { auth } from "@/integrations/firebase/client";
-import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import partsShop from "@/assets/rasi-parts-shop.jpg";
-import { fbRegisterUserApproval, fbCheckUserApproval, fbAuthenticateFallback } from "@/lib/rasi-data";
+import { fbRegisterUserApproval, fbCheckUserApproval, fbAuthenticateFallback, fbResetUserPassword } from "@/lib/rasi-data";
 
 const FULL_ADMIN_PERMISSIONS = [
   "dashboard:read",
@@ -131,24 +132,42 @@ function AuthPage() {
           return;
         }
 
+        if (password && password.length >= 6) {
+          // Direct password reset
+          await fbResetUserPassword(cleanEmail, password);
+
+          // Also attempt sending Firebase reset email in background with a timeout
+          try {
+            await Promise.race([
+              sendPasswordResetEmail(auth, cleanEmail),
+              new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 3000)),
+            ]);
+          } catch {}
+
+          toast.success(`Password updated successfully for ${cleanEmail}! Please sign in with your new password.`, { duration: 6000 });
+          setMode("signin");
+          return;
+        }
+
+        // If no new password was entered, try sending reset email
         try {
-          await sendPasswordResetEmail(auth, cleanEmail);
+          await Promise.race([
+            sendPasswordResetEmail(auth, cleanEmail),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 3500)),
+          ]);
           toast.success(`Password reset email sent to ${cleanEmail}! Please check your inbox or spam folder.`);
           setMode("signin");
           return;
         } catch (err: any) {
-          if (err.code === "auth/user-not-found") {
-            toast.error("No account found with this email. Please check the email or create an account.");
-          } else if (err.code === "auth/invalid-email") {
-            toast.error("Please enter a valid email address.");
-          } else if (err.code === "auth/configuration-not-found" || err.message?.includes("configuration-not-found")) {
+          if (err.message === "TIMEOUT" || err.code === "auth/configuration-not-found" || err.message?.includes("configuration-not-found")) {
             toast.info(
-              `Reset request received for ${cleanEmail}. Note: To enable Firebase native email delivery, turn on Email/Password in Firebase Console > Authentication > Sign-in method.`,
-              { duration: 8000 }
+              `Please enter your new password in the field and click 'Reset & Update Password' to update your password directly.`,
+              { duration: 7000 }
             );
-            setMode("signin");
+          } else if (err.code === "auth/user-not-found") {
+            toast.error("No account found with this email. Please verify your email or click 'Create an account'.");
           } else {
-            toast.error(err.message || "Failed to send reset email. Please try again.");
+            toast.error(err.message || "Could not send reset email. Enter your new password to reset directly.");
           }
           return;
         }
@@ -303,12 +322,110 @@ function AuthPage() {
     }
   }
 
-  async function signInWithProvider(provider: "google" | "lovable") {
+  async function handleGoogleSignIn() {
+    setBusy(true);
+    setPendingNotice(null);
     try {
-      const result = await lovable.auth.signInWithOAuth(provider, { redirect_uri: window.location.origin });
-      if (result.error) throw result.error;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not sign in. Please try again.");
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      let cred: any = null;
+
+      try {
+        cred = await signInWithPopup(auth, provider);
+      } catch (popupErr: any) {
+        if (popupErr.code === "auth/popup-blocked" || popupErr.code === "auth/popup-closed-by-user") {
+          toast.error("Google sign-in popup was closed or blocked. Please allow popups and try again.");
+          return;
+        }
+        if (popupErr.code === "auth/configuration-not-found" || popupErr.message?.includes("configuration-not-found")) {
+          toast.error(
+            "Google provider is not enabled in Firebase Console. Please sign in with Email & Password or enable Google in Firebase Console > Authentication > Sign-in method.",
+            { duration: 8000 }
+          );
+          return;
+        }
+        throw popupErr;
+      }
+
+      const googleUser = cred?.user;
+      if (!googleUser || !googleUser.email) {
+        throw new Error("Unable to read Google account email.");
+      }
+
+      const cleanEmail = googleUser.email.toLowerCase().trim();
+      const displayName = googleUser.displayName || cleanEmail.split("@")[0] || "Staff";
+      const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
+
+      if (isAdmin) {
+        const adminStaff = {
+          userId: googleUser.uid,
+          email: "ranjithselvaraj14@gmail.com",
+          fullName: "RANJITH SELVARAJ",
+          roleId: "administrator",
+          permissions: FULL_ADMIN_PERMISSIONS,
+        };
+        localStorage.setItem("rasi_staff_session", JSON.stringify(adminStaff));
+        toast.success("Signed in with Google as Administrator: RANJITH SELVARAJ");
+        await navigate({ to: "/dashboard" });
+        return;
+      }
+
+      // Check approval for staff Google accounts
+      const approval = await fbCheckUserApproval(cleanEmail, googleUser.uid);
+      if (!approval.approved) {
+        await fbRegisterUserApproval({
+          uid: googleUser.uid,
+          email: cleanEmail,
+          name: displayName,
+        });
+        try { await auth.signOut(); } catch {}
+        localStorage.removeItem("rasi_staff_session");
+        setPendingNotice(
+          `Google account ${cleanEmail} registered! A notification has been sent to administrator (ranjithselvaraj14@gmail.com). You will be able to sign in once the admin approves your account.`
+        );
+        toast.info("Account registered! Awaiting administrator approval before sign in.", { duration: 8000 });
+        return;
+      }
+
+      // Approved staff
+      const staffSession = {
+        userId: googleUser.uid,
+        email: cleanEmail,
+        fullName: displayName,
+        roleId: "staff",
+        permissions: STAFF_PERMISSIONS,
+      };
+      localStorage.setItem("rasi_staff_session", JSON.stringify(staffSession));
+      toast.success(`Signed in as Counter Staff: ${staffSession.fullName}`);
+      await navigate({ to: "/pos" });
+    } catch (err: any) {
+      toast.error(err?.message || "Google sign in failed. Please try again or use email.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSendResetEmailOnly() {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      toast.error("Please enter your email address first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await Promise.race([
+        sendPasswordResetEmail(auth, cleanEmail),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 3500)),
+      ]);
+      toast.success(`Password reset email sent to ${cleanEmail}! Check inbox or spam folder.`);
+    } catch (err: any) {
+      if (err.message === "TIMEOUT" || err.code === "auth/configuration-not-found") {
+        toast.info("Enter your new password above and click 'Reset & Update Password' to update your password directly.", { duration: 7000 });
+      } else {
+        toast.error(err.message || "Could not send reset email. Enter your new password above to reset directly.");
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -316,7 +433,7 @@ function AuthPage() {
   const description = mode === "signup"
     ? "Request a staff account (requires admin approval by ranjithselvaraj14@gmail.com)."
     : mode === "forgot"
-      ? "Enter your email to receive a secure reset link."
+      ? "Enter your email and new password to reset your account directly."
       : "Sign in to continue to Rasi Automobiles.";
 
   return (
@@ -373,7 +490,7 @@ function AuthPage() {
                 type="button"
                 variant="outline"
                 disabled={busy}
-                onClick={() => void signInWithProvider("google")}
+                onClick={() => void handleGoogleSignIn()}
                 className="h-10 w-full justify-center gap-2.5 border-input bg-card text-xs font-medium text-foreground shadow-none hover:bg-muted"
               >
                 <GoogleMark /> Continue with Google
@@ -416,6 +533,33 @@ function AuthPage() {
                 />
               </div>
             </Field>
+            {mode === "forgot" && (
+              <Field label="New Password">
+                <div className="relative">
+                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-10 pr-11"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="New password (min 6 characters)"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    type="button"
+                    onClick={() => setShowPassword((shown) => !shown)}
+                    className="absolute right-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showPassword ? <EyeOff /> : <Eye />}
+                  </Button>
+                </div>
+              </Field>
+            )}
             {mode !== "forgot" && (
               <Field label="Password">
                 <div className="relative">
@@ -460,8 +604,20 @@ function AuthPage() {
               </div>
             )}
             <Button type="submit" disabled={busy} className="mt-2 h-11 w-full font-bold">
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create staff account" : "Send password reset link"}
+              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create staff account" : "Reset & Update Password"}
             </Button>
+            {mode === "forgot" && (
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleSendResetEmailOnly()}
+                  className="text-xs text-muted-foreground hover:text-primary hover:underline cursor-pointer"
+                >
+                  Or send password reset link to email
+                </button>
+              </div>
+            )}
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
