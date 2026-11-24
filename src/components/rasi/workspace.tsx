@@ -606,9 +606,9 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   };
 
   return (
-    <div className="workspace flex min-h-screen bg-background">
+    <div className="workspace min-h-screen bg-background">
       {mobileNavOpen && <button className="fixed inset-0 z-30 cursor-default bg-primary/40 md:hidden" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
-      <aside className={`sidebar-nav no-print fixed inset-y-0 left-0 z-40 flex w-[252px] flex-col bg-sidebar text-sidebar-foreground transition-transform duration-200 md:static md:translate-x-0 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+      <aside className={`sidebar-nav no-print fixed inset-y-0 left-0 z-40 flex w-[252px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
         <div className="flex h-[72px] items-center gap-3 border-b border-sidebar-border px-4">
           <img
             src="/rasi-logo.png"
@@ -650,7 +650,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1">
+      <main className="min-w-0 flex-1 md:pl-[252px]">
         <header className="sticky top-0 z-20 flex h-[68px] items-center gap-3 border-b bg-background/95 px-4 backdrop-blur sm:px-6 lg:px-8">
           <div className="flex items-center gap-2 md:hidden">
             <Button variant="ghost" size="icon" className="shrink-0" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}>
