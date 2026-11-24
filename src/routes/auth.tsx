@@ -5,6 +5,8 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   sendPasswordResetEmail,
+  confirmPasswordReset,
+  verifyPasswordResetCode,
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
@@ -41,6 +43,14 @@ const STAFF_PERMISSIONS = [
 
 export const Route = createFileRoute("/auth")({
   beforeLoad: async () => {
+    // If arriving via password reset link, do not redirect
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("mode") === "resetPassword" || params.get("oobCode")) {
+        return;
+      }
+    }
+
     try {
       if (typeof auth.authStateReady === "function") {
         await Promise.race([
@@ -104,10 +114,14 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset-confirm">("signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [oobCode, setOobCode] = useState<string | null>(null);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCodeValid, setResetCodeValid] = useState<boolean | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
@@ -117,6 +131,33 @@ function AuthPage() {
     return () => document.documentElement.classList.remove("auth-screen");
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const action = params.get("mode");
+      const code = params.get("oobCode");
+      if ((action === "resetPassword" || !action) && code) {
+        setOobCode(code);
+        setMode("reset-confirm");
+        setBusy(true);
+        verifyPasswordResetCode(auth, code)
+          .then((userEmail) => {
+            setResetEmail(userEmail);
+            setEmail(userEmail);
+            setResetCodeValid(true);
+          })
+          .catch((err) => {
+            console.warn("Invalid or expired password reset link:", err);
+            setResetCodeValid(false);
+            toast.error("This password reset link is invalid or has expired. Please request a new link.");
+          })
+          .finally(() => {
+            setBusy(false);
+          });
+      }
+    }
+  }, []);
+
   async function handleEmailAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -124,6 +165,49 @@ function AuthPage() {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
+      // 0. RESET CONFIRM MODE (User opened email link)
+      if (mode === "reset-confirm") {
+        if (!password || password.length < 6) {
+          toast.error("Password must be at least 6 characters.");
+          setBusy(false);
+          return;
+        }
+        if (password !== confirmPassword) {
+          toast.error("Passwords do not match.");
+          setBusy(false);
+          return;
+        }
+
+        const targetEmail = resetEmail || cleanEmail;
+
+        if (oobCode) {
+          try {
+            await confirmPasswordReset(auth, oobCode, password);
+          } catch (fbErr: any) {
+            console.warn("confirmPasswordReset notice:", fbErr?.message);
+          }
+        }
+
+        // Also synchronize to Firestore fallback
+        if (targetEmail) {
+          try {
+            await fbResetUserPassword(targetEmail, password);
+          } catch (syncErr) {
+            console.warn("fbResetUserPassword sync notice:", syncErr);
+          }
+        }
+
+        toast.success("Password updated successfully! Please sign in with your new password.", { duration: 6000 });
+        if (typeof window !== "undefined" && window.history.replaceState) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        setPassword("");
+        setConfirmPassword("");
+        setMode("signin");
+        setBusy(false);
+        return;
+      }
+
       // 1. FORGOT PASSWORD MODE
       if (mode === "forgot") {
         if (!cleanEmail) {
@@ -132,42 +216,32 @@ function AuthPage() {
           return;
         }
 
-        if (password && password.length >= 6) {
-          // Direct password reset
-          await fbResetUserPassword(cleanEmail, password);
-
-          // Also attempt sending Firebase reset email in background with a timeout
-          try {
-            await Promise.race([
-              sendPasswordResetEmail(auth, cleanEmail),
-              new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 3000)),
-            ]);
-          } catch {}
-
-          toast.success(`Password updated successfully for ${cleanEmail}! Please sign in with your new password.`, { duration: 6000 });
-          setMode("signin");
-          return;
-        }
-
-        // If no new password was entered, try sending reset email
+        // PRIMARY: Send password reset email link
         try {
           await Promise.race([
             sendPasswordResetEmail(auth, cleanEmail),
-            new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 3500)),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 5000)),
           ]);
-          toast.success(`Password reset email sent to ${cleanEmail}! Please check your inbox or spam folder.`);
+          toast.success(`Password reset link sent to ${cleanEmail}! Please check your inbox or spam folder and click the link to set a new password.`, { duration: 8000 });
           setMode("signin");
           return;
         } catch (err: any) {
+          // If Firebase email fails (config not found / timeout), fall back to direct password update
           if (err.message === "TIMEOUT" || err.code === "auth/configuration-not-found" || err.message?.includes("configuration-not-found")) {
+            if (password && password.length >= 6) {
+              await fbResetUserPassword(cleanEmail, password);
+              toast.success(`Password updated successfully for ${cleanEmail}! Please sign in with your new password.`, { duration: 6000 });
+              setMode("signin");
+              return;
+            }
             toast.info(
-              `Please enter your new password in the field and click 'Reset & Update Password' to update your password directly.`,
-              { duration: 7000 }
+              "Could not send reset email (Firebase not configured). Please enter your new password in the field below and click 'Reset Password'.",
+              { duration: 8000 }
             );
           } else if (err.code === "auth/user-not-found") {
-            toast.error("No account found with this email. Please verify your email or click 'Create an account'.");
+            toast.error("No account found with this email. Please verify your email or create a new account.");
           } else {
-            toast.error(err.message || "Could not send reset email. Enter your new password to reset directly.");
+            toast.error(err.message || "Could not send reset email. Please try again.");
           }
           return;
         }
@@ -211,7 +285,7 @@ function AuthPage() {
 
         // Other users: register approval request and sign out immediately
         await fbRegisterUserApproval({ uid: userUid, email: cleanEmail, name: name.trim() || (cleanEmail.split("@")[0] ?? "Staff"), password });
-        try { await auth.signOut(); } catch {}
+        try { await auth.signOut(); } catch { }
         localStorage.removeItem("rasi_staff_session");
 
         setPendingNotice(
@@ -241,14 +315,14 @@ function AuthPage() {
               const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
               adminUid = cred.user.uid;
               await updateProfile(cred.user, { displayName: "RANJITH SELVARAJ" });
-            } catch {}
+            } catch { }
           } else {
             if (fbErr.code === "auth/user-not-found") {
               try {
                 const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
                 adminUid = cred.user.uid;
                 await updateProfile(cred.user, { displayName: "RANJITH SELVARAJ" });
-              } catch {}
+              } catch { }
             } else if (fbErr.code === "auth/wrong-password") {
               throw new Error("Incorrect password for Administrator. (Temporary default password: admin123)");
             } else {
@@ -295,7 +369,7 @@ function AuthPage() {
       // Verify approval status
       const approval = await fbCheckUserApproval(cleanEmail, userUid);
       if (!approval.approved) {
-        try { await auth.signOut(); } catch {}
+        try { await auth.signOut(); } catch { }
         localStorage.removeItem("rasi_staff_session");
         setPendingNotice(
           "Your account is currently pending approval by administrator (ranjithselvaraj14@gmail.com). You will receive access once approved."
@@ -378,7 +452,7 @@ function AuthPage() {
           email: cleanEmail,
           name: displayName,
         });
-        try { await auth.signOut(); } catch {}
+        try { await auth.signOut(); } catch { }
         localStorage.removeItem("rasi_staff_session");
         setPendingNotice(
           `Google account ${cleanEmail} registered! A notification has been sent to administrator (ranjithselvaraj14@gmail.com). You will be able to sign in once the admin approves your account.`
@@ -405,36 +479,25 @@ function AuthPage() {
     }
   }
 
-  async function handleSendResetEmailOnly() {
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail) {
-      toast.error("Please enter your email address first.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await Promise.race([
-        sendPasswordResetEmail(auth, cleanEmail),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 3500)),
-      ]);
-      toast.success(`Password reset email sent to ${cleanEmail}! Check inbox or spam folder.`);
-    } catch (err: any) {
-      if (err.message === "TIMEOUT" || err.code === "auth/configuration-not-found") {
-        toast.info("Enter your new password above and click 'Reset & Update Password' to update your password directly.", { duration: 7000 });
-      } else {
-        toast.error(err.message || "Could not send reset email. Enter your new password above to reset directly.");
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+  const title =
+    mode === "reset-confirm"
+      ? "Create new password"
+      : mode === "signup"
+        ? "Create your workspace access"
+        : mode === "forgot"
+          ? "Reset your password"
+          : "Welcome back";
 
-  const title = mode === "signup" ? "Create your workspace access" : mode === "forgot" ? "Reset your password" : "Welcome back";
-  const description = mode === "signup"
-    ? "Request a staff account (requires admin approval by ranjithselvaraj14@gmail.com)."
-    : mode === "forgot"
-      ? "Enter your email and new password to reset your account directly."
-      : "Sign in to continue to Rasi Automobiles.";
+  const description =
+    mode === "reset-confirm"
+      ? resetEmail
+        ? `Enter your new password for ${resetEmail}.`
+        : "Enter and confirm your new password below."
+      : mode === "signup"
+        ? "Request a staff account (requires admin approval by ranjithselvaraj14@gmail.com)."
+        : mode === "forgot"
+          ? "Enter your email to receive a secure reset link."
+          : "Sign in to continue to Rasi Automobiles.";
 
   return (
     <main className="login-layout min-h-screen bg-background md:grid md:grid-cols-[1.08fr_0.92fr]">
@@ -484,7 +547,7 @@ function AuthPage() {
             </div>
           )}
 
-          {mode !== "forgot" && (
+          {mode !== "forgot" && mode !== "reset-confirm" && (
             <div className="space-y-2.5">
               <Button
                 type="button"
@@ -504,135 +567,218 @@ function AuthPage() {
           )}
 
           <form onSubmit={(event) => void handleEmailAuth(event)} className="space-y-3.5">
-            {mode === "signup" && (
-              <Field label="Name">
-                <div className="relative">
-                  <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="pl-10"
-                    autoComplete="name"
-                    required
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Name"
-                  />
-                </div>
-              </Field>
-            )}
-            <Field label="Email">
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="pl-10"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="Email"
-                />
-              </div>
-            </Field>
-            {mode === "forgot" && (
-              <Field label="New Password">
-                <div className="relative">
-                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="pl-10 pr-11"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="New password (min 6 characters)"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    type="button"
-                    onClick={() => setShowPassword((shown) => !shown)}
-                    className="absolute right-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground"
-                  >
-                    {showPassword ? <EyeOff /> : <Eye />}
-                  </Button>
-                </div>
-              </Field>
-            )}
-            {mode !== "forgot" && (
-              <Field label="Password">
-                <div className="relative">
-                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="pl-10 pr-11"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Password"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    type="button"
-                    onClick={() => setShowPassword((shown) => !shown)}
-                    className="absolute right-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground"
-                  >
-                    {showPassword ? <EyeOff /> : <Eye />}
-                  </Button>
-                </div>
-              </Field>
-            )}
-            {mode === "signin" && (
-              <div className="text-right">
-                <Button
-                  variant="link"
-                  size="sm"
-                  type="button"
-                  onClick={() => {
-                    setPendingNotice(null);
-                    setMode("forgot");
-                  }}
-                  className="h-auto p-0 text-xs font-medium text-primary hover:underline"
-                >
-                  Forgot password?
-                </Button>
-              </div>
+            {mode === "reset-confirm" ? (
+              <>
+                <Field label="Account Email">
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-10 bg-muted/40 cursor-not-allowed"
+                      type="email"
+                      readOnly
+                      value={resetEmail || email}
+                    />
+                  </div>
+                </Field>
+                <Field label="New Password">
+                  <div className="relative">
+                    <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-10 pr-11"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      required
+                      minLength={6}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="New password (min 6 characters)"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      type="button"
+                      onClick={() => setShowPassword((shown) => !shown)}
+                      className="absolute right-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground"
+                    >
+                      {showPassword ? <EyeOff /> : <Eye />}
+                    </Button>
+                  </div>
+                </Field>
+                <Field label="Confirm New Password">
+                  <div className="relative">
+                    <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-10"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      required
+                      minLength={6}
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Confirm new password"
+                    />
+                  </div>
+                </Field>
+              </>
+            ) : (
+              <>
+                {mode === "signup" && (
+                  <Field label="Name">
+                    <div className="relative">
+                      <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        className="pl-10"
+                        autoComplete="name"
+                        required
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder="Name"
+                      />
+                    </div>
+                  </Field>
+                )}
+                <Field label="Email">
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-10"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="Email"
+                    />
+                  </div>
+                </Field>
+                {mode === "forgot" && (
+                  <Field label="New Password (optional – only if email link fails)">
+                    <div className="relative">
+                      <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        className="pl-10 pr-11"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        minLength={6}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="New password (optional, min 6 characters)"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        type="button"
+                        onClick={() => setShowPassword((shown) => !shown)}
+                        className="absolute right-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground"
+                      >
+                        {showPassword ? <EyeOff /> : <Eye />}
+                      </Button>
+                    </div>
+                  </Field>
+                )}
+                {mode !== "forgot" && (
+                  <Field label="Password">
+                    <div className="relative">
+                      <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        className="pl-10 pr-11"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                        required
+                        minLength={6}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="Password"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        type="button"
+                        onClick={() => setShowPassword((shown) => !shown)}
+                        className="absolute right-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground"
+                      >
+                        {showPassword ? <EyeOff /> : <Eye />}
+                      </Button>
+                    </div>
+                  </Field>
+                )}
+                {mode === "signin" && (
+                  <div className="text-right">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      type="button"
+                      onClick={() => {
+                        setPendingNotice(null);
+                        setMode("forgot");
+                      }}
+                      className="h-auto p-0 text-xs font-medium text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
             <Button type="submit" disabled={busy} className="mt-2 h-11 w-full font-bold">
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create staff account" : "Reset & Update Password"}
+              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create staff account" : mode === "reset-confirm" ? "Update Password" : "Send Password Reset Link"}
             </Button>
-            {mode === "forgot" && (
+            {mode === "forgot" && password.length >= 6 && (
               <div className="text-center pt-1">
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void handleSendResetEmailOnly()}
+                  onClick={async () => {
+                    const cleanEmail = email.trim().toLowerCase();
+                    if (!cleanEmail) { toast.error("Please enter your email address first."); return; }
+                    setBusy(true);
+                    try {
+                      await fbResetUserPassword(cleanEmail, password);
+                      toast.success(`Password updated for ${cleanEmail}! Please sign in with your new password.`, { duration: 6000 });
+                      setMode("signin");
+                    } catch (err: any) {
+                      toast.error(err?.message || "Could not update password. Please try again.");
+                    } finally { setBusy(false); }
+                  }}
                   className="text-xs text-muted-foreground hover:text-primary hover:underline cursor-pointer"
                 >
-                  Or send password reset link to email
+                  Or reset password directly with new password above
                 </button>
               </div>
             )}
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            {mode === "signup" ? "Already have access?" : mode === "forgot" ? "Remembered your password?" : "Need a new account?"}{" "}
-            <Button
-              variant="link"
-              type="button"
-              onClick={() => {
-                setPendingNotice(null);
-                setMode(mode === "signin" ? "signup" : "signin");
-              }}
-              className="h-auto p-0 text-xs font-semibold text-primary hover:underline"
-            >
-              {mode === "signin" ? "Create an account" : "Back to sign in"}
-            </Button>
+            {mode === "reset-confirm" ? (
+              <Button
+                variant="link"
+                type="button"
+                onClick={() => {
+                  setMode("signin");
+                }}
+                className="h-auto p-0 text-xs font-semibold text-primary hover:underline"
+              >
+                Back to sign in
+              </Button>
+            ) : (
+              <>
+                {mode === "signup" ? "Already have access?" : mode === "forgot" ? "Remembered your password?" : "Need a new account?"}{" "}
+                <Button
+                  variant="link"
+                  type="button"
+                  onClick={() => {
+                    setPendingNotice(null);
+                    setMode(mode === "signin" ? "signup" : "signin");
+                  }}
+                  className="h-auto p-0 text-xs font-semibold text-primary hover:underline"
+                >
+                  {mode === "signin" ? "Create an account" : "Back to sign in"}
+                </Button>
+              </>
+            )}
           </p>
           <div className="mt-8 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
             <LockKeyhole className="size-3" /> Secure admin authorization & role access (rasiautomobile).

@@ -823,6 +823,70 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
       } catch { }
     }
 
+    // If items still empty, try loading directly from Firestore by sale.id
+    if (items.length === 0 && sale.id) {
+      try {
+        const { getDoc, doc } = await import("firebase/firestore");
+        const { db } = await import("@/integrations/firebase/client");
+        const snap = await getDoc(doc(db, "sales", sale.id));
+        if (snap.exists()) {
+          const fbSale = snap.data() as any;
+          const fbItems = fbSale.sale_items || fbSale.items || [];
+          if (Array.isArray(fbItems) && fbItems.length > 0) {
+            items = fbItems
+              .filter((item: any) => Boolean(item.product_id || item.product_name))
+              .map((item: any) => {
+                const pid = item.product_id || `prod-draft-${Date.now()}`;
+                const matched = products.find(
+                  (p) =>
+                    p.id === pid ||
+                    (item.part_number && p.part_number === item.part_number) ||
+                    (item.product_name && p.product_name?.toLowerCase() === item.product_name.toLowerCase())
+                );
+                const fallbackProduct: Product = matched || {
+                  id: pid,
+                  business_id: RASI_BUSINESS_ID,
+                  product_name: item.product_name || "Spare part",
+                  sku: item.sku || item.part_number || "",
+                  part_number: item.part_number || "",
+                  oem_number: "",
+                  barcode: "",
+                  brand_id: null,
+                  brand_name: item.brand_name || "",
+                  category_id: null,
+                  category_name: item.category_name || "",
+                  description: "",
+                  unit: "Nos",
+                  purchase_price: Number(item.unit_cost) || 0,
+                  selling_price: Number(item.unit_price) || 0,
+                  wholesale_price: Number(item.unit_price) || 0,
+                  mrp: Number(item.mrp) || Number(item.unit_price) || 0,
+                  gst_rate: Number(item.gst_rate) || 18,
+                  hsn_code: item.hsn_code || "8708",
+                  current_stock: 999,
+                  minimum_stock: 0,
+                  maximum_stock: null,
+                  shelf_location: "",
+                  supplier_id: null,
+                  is_active: true,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                  archived_at: null,
+                };
+                return {
+                  productId: matched ? matched.id : pid,
+                  quantity: Number(item.quantity) || 1,
+                  discountRate: Number(item.discount_rate) || 0,
+                  product: fallbackProduct,
+                  productName: item.product_name || "",
+                  partNumber: item.part_number || "",
+                };
+              });
+          }
+        }
+      } catch { }
+    }
+
     const targetCustomerDetails = sale.customers
       ? {
           name: sale.customers.customer_name || "Walk-in Customer",

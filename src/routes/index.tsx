@@ -26,6 +26,23 @@ function EntryPage() {
     let active = true;
 
     async function checkAuth() {
+      // Check if arriving via password reset link
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const mode = params.get("mode");
+        const oobCode = params.get("oobCode");
+        if (mode === "resetPassword" || oobCode) {
+          if (active) {
+            void navigate({
+              to: "/auth",
+              search: Object.fromEntries(params.entries()) as any,
+              replace: true,
+            });
+            return;
+          }
+        }
+      }
+
       // Check if arriving via QR scan for invoice download/view
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
