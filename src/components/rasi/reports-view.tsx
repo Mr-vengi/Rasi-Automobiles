@@ -74,13 +74,17 @@ export function ReportsView({
     completedSales.forEach((s) => {
       const items = s.sale_items || [];
       items.forEach((item) => {
-        const key = item.sku || item.product_name;
-        const qty = Number(item.quantity);
-        const revenue = Number(item.line_total);
-        const cost = qty * Number(item.unit_cost || 0);
+        const key = item.sku || item.product_name || "item";
+        const rawQty = Number(item.quantity);
+        const qty = Number.isFinite(rawQty) && rawQty > 0 ? rawQty : 1;
+        const rawRevenue = (item as any).line_total ?? (item as any).total_amount ?? (item as any).total ?? (qty * Number(item.unit_price || 0));
+        const parsedRev = Number(rawRevenue);
+        const revenue = Number.isFinite(parsedRev) ? parsedRev : 0;
+        const rawCost = Number(item.unit_cost || 0);
+        const cost = qty * (Number.isFinite(rawCost) ? rawCost : 0);
         const existing = map.get(key) || {
-          name: item.product_name,
-          sku: item.sku,
+          name: item.product_name || "Spare part",
+          sku: item.sku || "",
           qty: 0,
           revenue: 0,
           cost: 0,

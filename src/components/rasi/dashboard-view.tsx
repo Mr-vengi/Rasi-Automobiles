@@ -148,9 +148,12 @@ export function DashboardView({
     completedSales.forEach((s) => {
       const items = s.sale_items || [];
       items.forEach((item) => {
-        const name = item.product_name;
-        const qty = Number(item.quantity);
-        const total = Number(item.line_total);
+        const name = item.product_name || "Spare Part";
+        const rawQty = Number(item.quantity);
+        const qty = Number.isFinite(rawQty) && rawQty > 0 ? rawQty : 1;
+        const rawTotal = (item as any).line_total ?? (item as any).total_amount ?? (item as any).total ?? (qty * Number(item.unit_price || 0));
+        const parsedTotal = Number(rawTotal);
+        const total = Number.isFinite(parsedTotal) ? parsedTotal : 0;
         if (!map.has(name)) {
           map.set(name, { name, qty, revenue: total });
         } else {
@@ -446,7 +449,9 @@ export function DashboardView({
                       <p className="text-[10px] text-muted-foreground">{p.qty} units sold</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="font-bold text-foreground">₹{p.revenue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                      <p className="font-bold text-foreground">
+                        ₹{Number.isFinite(p.revenue) ? p.revenue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                      </p>
                     </div>
                   </div>
                 ))

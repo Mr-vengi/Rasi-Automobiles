@@ -349,12 +349,14 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
     void queryClient.invalidateQueries({ queryKey: rasiKeys.all });
   }
 
-  function changePage(next: Page) {
+  function changePage(next: Page, preserveSelection = false) {
     setPage(next);
     setSearchText("");
     setMobileNavOpen(false);
-    setSelectedSale(null);
-    setSelectedPurchase(null);
+    if (!preserveSelection) {
+      setSelectedSale(null);
+      setSelectedPurchase(null);
+    }
     if (typeof window !== "undefined") {
       const targetUrl = next === "dashboard" ? "/dashboard" : `/${next}`;
       if (window.location.pathname !== targetUrl) {
@@ -549,9 +551,9 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
       await queryClient.refetchQueries({ queryKey: rasiKeys.sales });
       await queryClient.invalidateQueries({ queryKey: rasiKeys.all });
       if (status === "completed") {
+        changePage("sales", true);
         setSelectedSale(saleId);
         setAutoPrintSaleId(saleId);
-        changePage("sales");
       } else {
         changePage("sales");
       }

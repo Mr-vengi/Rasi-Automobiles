@@ -184,6 +184,14 @@
 
   .no-print { display: none !important; }
 
+  /* Hide main workspace background behind dialog during print so page only prints the invoice */
+  aside,
+  header,
+  nav,
+  main {
+    display: none !important;
+  }
+
   /* Hide dark modal overlay backdrop */
   div[data-state="open"].fixed.inset-0 {
     display: none !important;

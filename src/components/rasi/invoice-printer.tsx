@@ -31,15 +31,18 @@ function printInvoiceViaIframe(element: HTMLElement, title: string, format: "a4"
       existingIframe.remove();
     }
 
+    const isThermal = format === "thermal";
     const iframe = document.createElement("iframe");
     iframe.id = "invoice-print-frame";
+    // Place offscreen with real dimensions and non-zero opacity so Chromium print engine paints and triggers printer prompt
     iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
+    iframe.style.top = "-9999px";
+    iframe.style.left = "-9999px";
+    iframe.style.width = isThermal ? "80mm" : "210mm";
+    iframe.style.height = isThermal ? "250mm" : "297mm";
     iframe.style.border = "0";
-    iframe.style.visibility = "hidden";
+    iframe.style.opacity = "0.01";
+    iframe.style.pointerEvents = "none";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document;
@@ -52,8 +55,6 @@ function printInvoiceViaIframe(element: HTMLElement, title: string, format: "a4"
     const styles = Array.from(document.querySelectorAll("link[rel='stylesheet'], style"))
       .map((el) => el.outerHTML)
       .join("\n");
-
-    const isThermal = format === "thermal";
 
     doc.open();
     doc.write(`
@@ -105,18 +106,22 @@ function printInvoiceViaIframe(element: HTMLElement, title: string, format: "a4"
     `);
     doc.close();
 
-    setTimeout(() => {
+    const triggerPrint = () => {
       try {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
       } catch (err) {
-        console.warn("Iframe print error:", err);
+        console.warn("Iframe print error, falling back to window.print():", err);
         window.print();
       }
       setTimeout(() => {
-        iframe.remove();
-      }, 3000);
-    }, 400);
+        try {
+          iframe.remove();
+        } catch { }
+      }, 4000);
+    };
+
+    setTimeout(triggerPrint, 350);
   } catch (err) {
     console.warn("Iframe print fallback to window.print:", err);
     window.print();
@@ -775,7 +780,9 @@ export function InvoicePrinter({
                       </td>
                       <td className="py-1 text-center font-bold">{Number(item.quantity).toFixed(0)}</td>
                       <td className="py-1 text-right">₹{Number(item.unit_price).toFixed(0)}</td>
-                      <td className="py-1 text-right font-bold">₹{Number(item.line_total).toFixed(2)}</td>
+                      <td className="py-1 text-right font-bold">
+                        ₹{Number(item.line_total ?? (item as any).total_amount ?? (Number(item.quantity || 1) * Number(item.unit_price || 0))).toFixed(2)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

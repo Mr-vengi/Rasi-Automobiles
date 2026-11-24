@@ -1022,6 +1022,7 @@ export async function fbCreateSale(input: {
       sgst_amount: input.interstate ? 0 : tax / 2,
       igst_amount: input.interstate ? tax : 0,
       total_amount: taxable + tax,
+      line_total: taxable + tax,
     };
   });
 
