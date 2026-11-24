@@ -161,23 +161,89 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   const [selectedSale, setSelectedSale] = useState<string | null>(null);
   const [selectedPurchase, setSelectedPurchase] = useState<string | null>(null);
   const [inventoryProduct, setInventoryProduct] = useState("");
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [customerId, setCustomerId] = useState("walk-in");
-  const [customerDetails, setCustomerDetails] = useState<CustomerDetailsState>({
-    name: "Walk-in Customer",
-    phone: "",
-    gstin: "",
-    address: "",
+  const [cart, setCart] = useState<CartLine[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("rasi_active_cart");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed?.items)) return parsed.items;
+        }
+      } catch {}
+    }
+    return [];
   });
-  const [extraCharge, setExtraCharge] = useState<ExtraChargeState>({
-    enabled: false,
-    label: "Auto Charge",
-    amount: 0,
+  const [customerId, setCustomerId] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("rasi_active_cart");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.customerId) return parsed.customerId;
+        }
+      } catch {}
+    }
+    return "walk-in";
+  });
+  const [customerDetails, setCustomerDetails] = useState<CustomerDetailsState>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("rasi_active_cart");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.customerDetails) return parsed.customerDetails;
+        }
+      } catch {}
+    }
+    return {
+      name: "Walk-in Customer",
+      phone: "",
+      gstin: "",
+      address: "",
+    };
+  });
+  const [extraCharge, setExtraCharge] = useState<ExtraChargeState>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("rasi_active_cart");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.extraCharge) return parsed.extraCharge;
+        }
+      } catch {}
+    }
+    return {
+      enabled: false,
+      label: "Auto Charge",
+      amount: 0,
+    };
   });
   const [autoPrintSaleId, setAutoPrintSaleId] = useState<string | null>(null);
-  const [interstate, setInterstate] = useState(false);
+  const [interstate, setInterstate] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("rasi_active_cart");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (typeof parsed?.interstate === "boolean") return parsed.interstate;
+        }
+      } catch {}
+    }
+    return false;
+  });
   const [payment, setPayment] = useState<PaymentForm>(initialPayment);
-  const [resumeSaleId, setResumeSaleId] = useState<string | null>(null);
+  const [resumeSaleId, setResumeSaleId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("rasi_active_cart");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.saleId) return parsed.saleId;
+        }
+      } catch {}
+    }
+    return null;
+  });
   const [saving, setSaving] = useState(false);
   const [syncingCloud, setSyncingCloud] = useState(false);
   const [cloudNotice, setCloudNotice] = useState(false);
@@ -400,6 +466,9 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
     if (next === "pos" && !preserveSelection && !resumeSaleId) {
       setCart([]);
       setPayment(initialPayment());
+      if (typeof window !== "undefined") {
+        try { sessionStorage.removeItem("rasi_active_cart"); } catch {}
+      }
     }
   }
 
@@ -513,6 +582,38 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
           (line.productName && p.product_name?.toLowerCase() === line.productName.toLowerCase())
       );
     }
+    if (!product) {
+      product = {
+        id: line.productId || `prod-item-${Date.now()}`,
+        business_id: RASI_BUSINESS_ID,
+        product_name: (line as any).productName || "Spare part",
+        sku: (line as any).partNumber || "",
+        part_number: (line as any).partNumber || "",
+        oem_number: "",
+        barcode: "",
+        brand_id: null,
+        brand_name: "",
+        category_id: null,
+        category_name: "",
+        description: "",
+        unit: "Nos",
+        purchase_price: (line as any).unitCost || 0,
+        selling_price: (line as any).unitPrice || 0,
+        wholesale_price: (line as any).unitPrice || 0,
+        mrp: (line as any).unitPrice || 0,
+        gst_rate: (line as any).gstRate || 18,
+        hsn_code: (line as any).hsnCode || "8708",
+        current_stock: 999,
+        minimum_stock: 0,
+        maximum_stock: null,
+        shelf_location: "",
+        supplier_id: null,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        archived_at: null,
+      };
+    }
     return { ...line, product };
   }).filter((line): line is typeof line & { product: Product } => Boolean(line.product));
 
@@ -593,6 +694,9 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
       setCustomerId("walk-in");
       setCustomerDetails({ name: "Walk-in Customer", phone: "", gstin: "", address: "" });
       setExtraCharge({ enabled: false, label: "Auto Charge", amount: 0 });
+      if (typeof window !== "undefined") {
+        try { sessionStorage.removeItem("rasi_active_cart"); } catch {}
+      }
       if (resumeSaleId && resumeSaleId !== saleId && status === "completed") {
         void fbDeleteSale(resumeSaleId).catch(() => { });
       }
@@ -719,32 +823,54 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
       } catch { }
     }
 
+    const targetCustomerDetails = sale.customers
+      ? {
+          name: sale.customers.customer_name || "Walk-in Customer",
+          phone: sale.customers.phone || "",
+          gstin: sale.customers.gstin || "",
+          address: sale.customers.billing_address || "",
+        }
+      : {
+          name: "Walk-in Customer",
+          phone: "",
+          gstin: "",
+          address: "",
+        };
+
+    const targetExtraCharge =
+      sale.extra_charge_amount && Number(sale.extra_charge_amount) > 0
+        ? {
+            enabled: true,
+            label: sale.extra_charge_label || "Auto Charge",
+            amount: Number(sale.extra_charge_amount),
+          }
+        : { enabled: false, label: "Auto Charge", amount: 0 };
+
+    const targetInterstate = Boolean(sale.is_interstate);
+
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem(
+          "rasi_active_cart",
+          JSON.stringify({
+            saleId: sale.id,
+            items,
+            customerId: sale.customer_id ?? "walk-in",
+            customerDetails: targetCustomerDetails,
+            extraCharge: targetExtraCharge,
+            interstate: targetInterstate,
+          })
+        );
+      } catch {}
+    }
+
     setResumeSaleId(sale.id);
     setCart(items);
-    changePage("pos", true);
     setCustomerId(sale.customer_id ?? "walk-in");
-    if (sale.customers) {
-      setCustomerDetails({
-        name: sale.customers.customer_name || "Walk-in Customer",
-        phone: sale.customers.phone || "",
-        gstin: sale.customers.gstin || "",
-        address: sale.customers.billing_address || "",
-      });
-    }
-    if (sale.extra_charge_amount && Number(sale.extra_charge_amount) > 0) {
-      setExtraCharge({
-        enabled: true,
-        label: sale.extra_charge_label || "Auto Charge",
-        amount: Number(sale.extra_charge_amount),
-      });
-    } else {
-      setExtraCharge({ enabled: false, label: "Auto Charge", amount: 0 });
-    }
-    if (sale.is_interstate) {
-      setInterstate(true);
-    } else {
-      setInterstate(false);
-    }
+    setCustomerDetails(targetCustomerDetails);
+    setExtraCharge(targetExtraCharge);
+    setInterstate(targetInterstate);
+    changePage("pos", true);
     toast.success(`Draft invoice ${sale.invoice_number || ""} loaded onto counter!`);
   }
 

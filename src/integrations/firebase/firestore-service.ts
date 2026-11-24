@@ -1396,7 +1396,7 @@ export async function fbRegisterUserApproval(input: {
       const list: UserApproval[] = existingRaw ? JSON.parse(existingRaw) : [];
       const updated = [approvalRecord, ...list.filter((u) => u.email !== email)];
       localStorage.setItem("rasi_user_approvals", JSON.stringify(updated));
-    } catch {}
+    } catch { }
   }
 }
 
@@ -1438,7 +1438,7 @@ export async function fbCheckUserApproval(
           return { approved: match.status === "approved", status: match.status, role: match.role || "staff" };
         }
       }
-    } catch {}
+    } catch { }
   }
 
   return { approved: false, status: "pending", role: "staff" };
@@ -1458,7 +1458,7 @@ export async function fbAuthenticateFallback(
     if (querySnap && !querySnap.empty && querySnap.docs[0]) {
       record = querySnap.docs[0].data() as UserApproval;
     }
-  } catch {}
+  } catch { }
 
   if (!record && typeof window !== "undefined") {
     try {
@@ -1467,7 +1467,7 @@ export async function fbAuthenticateFallback(
         const list: UserApproval[] = JSON.parse(existingRaw);
         record = list.find((u) => u.email.toLowerCase() === cleanEmail) || null;
       }
-    } catch {}
+    } catch { }
   }
 
   if (isAdmin) {
@@ -1593,7 +1593,7 @@ export async function fbLoadUserApprovals(): Promise<UserApproval[]> {
     try {
       const existing = localStorage.getItem("rasi_user_approvals");
       if (existing) return JSON.parse(existing);
-    } catch {}
+    } catch { }
   }
   return [];
 }
@@ -1627,6 +1627,6 @@ export async function fbSetUserApprovalStatus(
         const updated = list.map((u) => (u.id === idOrUid || u.uid === idOrUid ? { ...u, ...updateData } : u));
         localStorage.setItem("rasi_user_approvals", JSON.stringify(updated));
       }
-    } catch {}
+    } catch { }
   }
 }
