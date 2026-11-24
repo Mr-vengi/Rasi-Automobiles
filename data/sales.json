@@ -1,1 +1,63 @@
-[]
+[
+  {
+    "id": "sale-1795501118948",
+    "customers": {
+      "gstin": "",
+      "customer_name": "Venkatesh K",
+      "phone": "9342661192",
+      "state": "Tamil Nadu",
+      "billing_address": ""
+    },
+    "payments": [
+      {
+        "reference_number": "",
+        "amount": 354,
+        "payment_method": "cash"
+      }
+    ],
+    "cgst_amount": 27,
+    "sale_date": "2026-11-24T06:18:38.948Z",
+    "subtotal": 300,
+    "updated_at": "2026-11-24T06:18:38.948Z",
+    "discount_amount": 0,
+    "invoice_number": "RA-2026-1001",
+    "payment_method": "cash",
+    "sale_items": [
+      {
+        "quantity": 1,
+        "gst_rate": 18,
+        "cgst_amount": 27,
+        "discount_rate": 0,
+        "sale_id": "sale-1795501118948",
+        "sgst_amount": 27,
+        "id": "item-sale-1795501118948-1",
+        "hsn_code": "8708",
+        "unit_price": 300,
+        "taxable_amount": 300,
+        "product_name": "1",
+        "total_amount": 354,
+        "discount_amount": 0,
+        "part_number": "",
+        "igst_amount": 0,
+        "unit_cost": 120,
+        "product_id": "prod-1795499878586"
+      }
+    ],
+    "paid_amount": 354,
+    "status": "completed",
+    "change_returned": 46,
+    "is_interstate": false,
+    "round_off": 0,
+    "extra_charge_label": null,
+    "sgst_amount": 27,
+    "total_amount": 354,
+    "tendered_amount": 400,
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "balance_due": 0,
+    "created_at": "2026-11-24T06:18:38.948Z",
+    "customer_id": null,
+    "extra_charge_amount": 0,
+    "taxable_amount": 300,
+    "igst_amount": 0
+  }
+]
