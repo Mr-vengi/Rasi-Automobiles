@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { ArrowRight, LoaderCircle, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/integrations/firebase/client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -23,19 +24,87 @@ function EntryPage() {
 
   useEffect(() => {
     let active = true;
-    void supabase.auth.getUser().then(({ data }) => {
-      if (active) void navigate({ to: data.user ? "/dashboard" : "/auth", replace: true });
-    });
-    return () => { active = false; };
+
+    async function checkAuth() {
+      // Check if arriving via QR scan for invoice download/view
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const invoiceId = params.get("id") || params.get("invoice");
+        if (invoiceId) {
+          if (active) {
+            void navigate({
+              to: "/invoice",
+              search: { id: invoiceId, download: params.get("download") || "1" } as any,
+              replace: true,
+            });
+            return;
+          }
+        }
+      }
+
+      // Check Firebase
+      try {
+        if (typeof auth.authStateReady === "function") {
+          await auth.authStateReady();
+        }
+        if (auth.currentUser) {
+          if (active) void navigate({ to: "/dashboard", replace: true });
+          return;
+        }
+      } catch {
+        // Continue
+      }
+
+      // Check local staff session
+      if (typeof window !== "undefined" && localStorage.getItem("rasi_staff_session")) {
+        if (active) void navigate({ to: "/dashboard", replace: true });
+        return;
+      }
+
+      // Check Supabase
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (data?.user) {
+          if (active) void navigate({ to: "/dashboard", replace: true });
+          return;
+        }
+      } catch {
+        // Continue
+      }
+
+      if (active) void navigate({ to: "/auth", replace: true });
+    }
+
+    void checkAuth();
+
+    return () => {
+      active = false;
+    };
   }, [navigate]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-5">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 p-5">
       <div className="flex w-full max-w-sm flex-col items-center text-center">
-        <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground"><Wrench className="size-5" /></div>
-        <p className="mt-4 text-sm font-bold tracking-[0.04em] text-foreground">RASI AUTOMOBILES</p>
-        <p className="mt-7 flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" /> Opening your workspace</p>
-        <Button variant="link" onClick={() => void navigate({ to: "/auth" })} className="mt-3 text-primary">Go to sign in <ArrowRight /></Button>
+        <div className="relative">
+          <img
+            src="/rasi-logo.png"
+            alt="Rasi Automobiles Billing"
+            className="size-28 rounded-full border-4 border-white shadow-xl bg-white object-cover"
+          />
+        </div>
+        <h1 className="mt-4 text-base font-black tracking-wider text-slate-900 uppercase">
+          Rasi Automobiles
+        </h1>
+        <p className="text-xs font-semibold text-primary">
+          Drive · Service · Bill Smartly
+        </p>
+        <div className="mt-8 flex items-center gap-2.5 rounded-full bg-white px-4 py-2 border shadow-xs text-xs font-medium text-slate-600">
+          <LoaderCircle className="size-4 animate-spin text-primary" />
+          <span>Opening your workspace...</span>
+        </div>
+        <Button variant="link" onClick={() => void navigate({ to: "/auth" })} className="mt-4 text-xs text-muted-foreground hover:text-primary">
+          Go to sign in <ArrowRight className="size-3.5 ml-1" />
+        </Button>
       </div>
     </main>
   );
