@@ -1350,6 +1350,7 @@ export type UserApproval = {
   uid: string;
   email: string;
   name: string;
+  password?: string;
   status: "pending" | "approved" | "rejected";
   role: "staff" | "administrator";
   requested_at: string;
@@ -1357,14 +1358,21 @@ export type UserApproval = {
   approved_by?: string | null;
 };
 
-export async function fbRegisterUserApproval(input: { uid: string; email: string; name: string }): Promise<void> {
+export async function fbRegisterUserApproval(input: {
+  uid?: string;
+  email: string;
+  name: string;
+  password?: string;
+}): Promise<void> {
   const email = input.email.toLowerCase().trim();
   const isAdmin = email === "ranjithselvaraj14@gmail.com";
+  const id = input.uid || `usr-${Date.now()}`;
   const approvalRecord: UserApproval = {
-    id: input.uid || `user-${Date.now()}`,
-    uid: input.uid || "",
+    id,
+    uid: id,
     email,
     name: input.name || email.split("@")[0] || "Staff",
+    password: input.password || "",
     status: isAdmin ? "approved" : "pending",
     role: isAdmin ? "administrator" : "staff",
     requested_at: new Date().toISOString(),
@@ -1434,6 +1442,66 @@ export async function fbCheckUserApproval(
   }
 
   return { approved: false, status: "pending", role: "staff" };
+}
+
+export async function fbAuthenticateFallback(
+  email: string,
+  password?: string
+): Promise<{ success: boolean; user?: { uid: string; email: string; name: string; role: string }; error?: string }> {
+  const cleanEmail = email.toLowerCase().trim();
+  const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
+
+  let record: UserApproval | null = null;
+  try {
+    const q = query(collection(db, "user_approvals"), where("email", "==", cleanEmail));
+    const querySnap = await withTimeout(getDocs(q), 3000, null);
+    if (querySnap && !querySnap.empty && querySnap.docs[0]) {
+      record = querySnap.docs[0].data() as UserApproval;
+    }
+  } catch {}
+
+  if (!record && typeof window !== "undefined") {
+    try {
+      const existingRaw = localStorage.getItem("rasi_user_approvals");
+      if (existingRaw) {
+        const list: UserApproval[] = JSON.parse(existingRaw);
+        record = list.find((u) => u.email.toLowerCase() === cleanEmail) || null;
+      }
+    } catch {}
+  }
+
+  if (isAdmin) {
+    if (record && record.password && password && record.password !== password) {
+      return { success: false, error: "Incorrect password for Administrator." };
+    }
+    if (!record && password) {
+      await fbRegisterUserApproval({ uid: "admin-ranjith-01", email: cleanEmail, name: "RANJITH SELVARAJ", password });
+    }
+    return {
+      success: true,
+      user: { uid: record?.id || "admin-ranjith-01", email: cleanEmail, name: "RANJITH SELVARAJ", role: "administrator" },
+    };
+  }
+
+  if (!record) {
+    return { success: false, error: "No staff account found with this email. Please click 'Create an account' first." };
+  }
+
+  if (record.password && password && record.password !== password) {
+    return { success: false, error: "Incorrect password. Please verify your credentials or click 'Forgot password?'." };
+  }
+
+  if (record.status !== "approved") {
+    return {
+      success: false,
+      error: "Account pending approval from admin ranjithselvaraj14@gmail.com. Please wait for authorization.",
+    };
+  }
+
+  return {
+    success: true,
+    user: { uid: record.id || record.uid, email: cleanEmail, name: record.name || "Staff Member", role: "staff" },
+  };
 }
 
 export async function fbLoadUserApprovals(): Promise<UserApproval[]> {

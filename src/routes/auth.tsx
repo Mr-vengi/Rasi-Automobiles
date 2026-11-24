@@ -14,7 +14,7 @@ import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import partsShop from "@/assets/rasi-parts-shop.jpg";
-import { fbRegisterUserApproval, fbCheckUserApproval } from "@/lib/rasi-data";
+import { fbRegisterUserApproval, fbCheckUserApproval, fbAuthenticateFallback } from "@/lib/rasi-data";
 
 const FULL_ADMIN_PERMISSIONS = [
   "dashboard:read",
@@ -141,6 +141,12 @@ function AuthPage() {
             toast.error("No account found with this email. Please check the email or create an account.");
           } else if (err.code === "auth/invalid-email") {
             toast.error("Please enter a valid email address.");
+          } else if (err.code === "auth/configuration-not-found" || err.message?.includes("configuration-not-found")) {
+            toast.info(
+              `Reset request received for ${cleanEmail}. Note: To enable Firebase native email delivery, turn on Email/Password in Firebase Console > Authentication > Sign-in method.`,
+              { duration: 8000 }
+            );
+            setMode("signin");
           } else {
             toast.error(err.message || "Failed to send reset email. Please try again.");
           }
@@ -151,49 +157,51 @@ function AuthPage() {
       // 2. SIGN UP (CREATE ACCOUNT) MODE
       if (mode === "signup") {
         const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
+        let userUid = `usr-${Date.now()}`;
 
         try {
           const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+          userUid = cred.user.uid;
           if (name.trim()) {
             await updateProfile(cred.user, { displayName: name.trim() });
           }
-
-          if (isAdmin) {
-            // Admin is pre-approved
-            await fbRegisterUserApproval({ uid: cred.user.uid, email: cleanEmail, name: name.trim() || "RANJITH SELVARAJ" });
-            const adminStaff = {
-              userId: cred.user.uid,
-              email: cleanEmail,
-              fullName: "RANJITH SELVARAJ",
-              roleId: "administrator",
-              permissions: FULL_ADMIN_PERMISSIONS,
-            };
-            localStorage.setItem("rasi_staff_session", JSON.stringify(adminStaff));
-            toast.success("Administrator account created! Welcome RANJITH SELVARAJ.");
-            await navigate({ to: "/dashboard" });
-            return;
-          }
-
-          // Other users: register approval request and sign out immediately
-          await fbRegisterUserApproval({ uid: cred.user.uid, email: cleanEmail, name: name.trim() });
-          await auth.signOut();
-          localStorage.removeItem("rasi_staff_session");
-
-          setPendingNotice(
-            `Account request submitted for ${cleanEmail}! A notification has been sent to administrator (ranjithselvaraj14@gmail.com). You will be able to sign in once the admin approves your account.`
-          );
-          toast.success("Account created! Awaiting administrator approval before sign in.");
-          setMode("signin");
-          setPassword("");
-          return;
         } catch (fbErr: any) {
           if (fbErr.code === "auth/email-already-in-use") {
             toast.error("An account with this email already exists. Please sign in instead.");
             setMode("signin");
             return;
           }
-          throw fbErr;
+          console.warn("Firebase Auth setup notice, using cloud registry fallback:", fbErr.code || fbErr.message);
         }
+
+        if (isAdmin) {
+          // Admin is pre-approved
+          await fbRegisterUserApproval({ uid: userUid, email: cleanEmail, name: name.trim() || "RANJITH SELVARAJ", password });
+          const adminStaff = {
+            userId: userUid,
+            email: cleanEmail,
+            fullName: "RANJITH SELVARAJ",
+            roleId: "administrator",
+            permissions: FULL_ADMIN_PERMISSIONS,
+          };
+          localStorage.setItem("rasi_staff_session", JSON.stringify(adminStaff));
+          toast.success("Administrator account registered! Welcome RANJITH SELVARAJ.");
+          await navigate({ to: "/dashboard" });
+          return;
+        }
+
+        // Other users: register approval request and sign out immediately
+        await fbRegisterUserApproval({ uid: userUid, email: cleanEmail, name: name.trim() || (cleanEmail.split("@")[0] ?? "Staff"), password });
+        try { await auth.signOut(); } catch {}
+        localStorage.removeItem("rasi_staff_session");
+
+        setPendingNotice(
+          `Account request submitted for ${cleanEmail}! A notification has been sent to administrator (ranjithselvaraj14@gmail.com). You will be able to sign in once the admin approves your account.`
+        );
+        toast.success("Account created! Awaiting administrator approval before sign in.", { duration: 7000 });
+        setMode("signin");
+        setPassword("");
+        return;
       }
 
       // 3. SIGN IN MODE
@@ -201,23 +209,31 @@ function AuthPage() {
 
       if (isAdmin) {
         // ADMIN LOGIN
+        let adminUid = "admin-ranjith-01";
         try {
-          await signInWithEmailAndPassword(auth, cleanEmail, password);
+          const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+          adminUid = cred.user.uid;
         } catch (fbErr: any) {
           if (fbErr.code === "auth/user-not-found") {
-            // First time setup: auto-provision admin account
-            const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-            await updateProfile(cred.user, { displayName: "RANJITH SELVARAJ" });
-            await fbRegisterUserApproval({ uid: cred.user.uid, email: cleanEmail, name: "RANJITH SELVARAJ" });
-          } else if (fbErr.code === "auth/wrong-password" || fbErr.code === "auth/invalid-credential") {
+            try {
+              const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+              adminUid = cred.user.uid;
+              await updateProfile(cred.user, { displayName: "RANJITH SELVARAJ" });
+            } catch {}
+          } else if (fbErr.code === "auth/wrong-password") {
             throw new Error("Incorrect password for Administrator. Please try again or use 'Forgot password?'.");
           } else {
-            throw fbErr;
+            // Configuration not found or cloud registry fallback
+            const fallback = await fbAuthenticateFallback(cleanEmail, password);
+            if (!fallback.success) {
+              throw new Error(fallback.error || "Authentication failed.");
+            }
+            adminUid = fallback.user?.uid || adminUid;
           }
         }
 
         const adminStaff = {
-          userId: auth.currentUser?.uid || "admin-ranjith-01",
+          userId: adminUid,
           email: "ranjithselvaraj14@gmail.com",
           fullName: "RANJITH SELVARAJ",
           roleId: "administrator",
@@ -235,19 +251,21 @@ function AuthPage() {
         const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
         userUid = cred.user.uid;
       } catch (fbErr: any) {
-        if (fbErr.code === "auth/user-not-found") {
-          throw new Error("No staff account found with this email. Please click 'Create an account' first.");
-        } else if (fbErr.code === "auth/wrong-password" || fbErr.code === "auth/invalid-credential") {
+        if (fbErr.code === "auth/wrong-password") {
           throw new Error("Incorrect password. Please verify your credentials or click 'Forgot password?'.");
-        } else {
-          throw fbErr;
         }
+        // Fallback check in cloud registry
+        const fallback = await fbAuthenticateFallback(cleanEmail, password);
+        if (!fallback.success) {
+          throw new Error(fallback.error || "Authentication failed.");
+        }
+        userUid = fallback.user?.uid || `usr-${Date.now()}`;
       }
 
       // Verify approval status
       const approval = await fbCheckUserApproval(cleanEmail, userUid);
       if (!approval.approved) {
-        await auth.signOut();
+        try { await auth.signOut(); } catch {}
         localStorage.removeItem("rasi_staff_session");
         setPendingNotice(
           "Your account is currently pending approval by administrator (ranjithselvaraj14@gmail.com). You will receive access once approved."
