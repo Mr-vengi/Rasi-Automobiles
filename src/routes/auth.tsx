@@ -210,25 +210,36 @@ function AuthPage() {
       if (isAdmin) {
         // ADMIN LOGIN
         let adminUid = "admin-ranjith-01";
+        const isTempAdminPass = password === "admin123";
+
         try {
           const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
           adminUid = cred.user.uid;
         } catch (fbErr: any) {
-          if (fbErr.code === "auth/user-not-found") {
+          if (isTempAdminPass) {
+            // Always allow admin123! Try to create in Firebase Auth if missing
             try {
               const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
               adminUid = cred.user.uid;
               await updateProfile(cred.user, { displayName: "RANJITH SELVARAJ" });
             } catch {}
-          } else if (fbErr.code === "auth/wrong-password") {
-            throw new Error("Incorrect password for Administrator. Please try again or use 'Forgot password?'.");
           } else {
-            // Configuration not found or cloud registry fallback
-            const fallback = await fbAuthenticateFallback(cleanEmail, password);
-            if (!fallback.success) {
-              throw new Error(fallback.error || "Authentication failed.");
+            if (fbErr.code === "auth/user-not-found") {
+              try {
+                const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+                adminUid = cred.user.uid;
+                await updateProfile(cred.user, { displayName: "RANJITH SELVARAJ" });
+              } catch {}
+            } else if (fbErr.code === "auth/wrong-password") {
+              throw new Error("Incorrect password for Administrator. (Temporary default password: admin123)");
+            } else {
+              // Configuration not found or cloud registry fallback
+              const fallback = await fbAuthenticateFallback(cleanEmail, password);
+              if (!fallback.success) {
+                throw new Error(fallback.error || "Incorrect password for Administrator. (Temporary default password: admin123)");
+              }
+              adminUid = fallback.user?.uid || adminUid;
             }
-            adminUid = fallback.user?.uid || adminUid;
           }
         }
 
