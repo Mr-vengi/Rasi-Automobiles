@@ -159,16 +159,6 @@ const memCache = {
 
 if (typeof window !== "undefined") {
   try {
-    const WIPE_KEY = "rasi_wipe_all_demo_data_v1";
-    if (!localStorage.getItem(WIPE_KEY)) {
-      localStorage.setItem("rasi_products", "[]");
-      localStorage.setItem("rasi_sales", "[]");
-      localStorage.setItem("rasi_movements", "[]");
-      localStorage.setItem("rasi_purchases", "[]");
-      localStorage.setItem(WIPE_KEY, "true");
-      void fetch("/api/clear-all", { method: "POST" }).catch(() => { });
-    }
-
     const load = (key: string) => {
       const v = localStorage.getItem(`rasi_${key}`);
       return v ? JSON.parse(v) : null;

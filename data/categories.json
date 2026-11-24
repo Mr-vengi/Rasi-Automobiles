@@ -1,0 +1,170 @@
+[
+  {
+    "id": "cat-1",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "AIR FILTERS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-2",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "AXLE  HCV PARTS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-3",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "BEARINGS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-4",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "BRAKE PADS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-5",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "BRAKE SYSTEM",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-6",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "CLUTCH & COVER ASSY SETS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-7",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "COOLENT",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-8",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "ELECTRICALS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-9",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "ENGINE OIL",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-10",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "ENGINE SYSTEM",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-11",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "FUEL FILTERS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-12",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "GREASES",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-13",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "HCV ACCESSORY",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-14",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "HYDRAULIC OIL",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-15",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "JACK & TOOLS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-16",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "LCV ACCESSORY",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-17",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "MIRROR",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-18",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "OIL FILTERS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-19",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "OIL SEAL",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-20",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "PASTE",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-21",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "SPRINGS",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-22",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "STAR",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-23",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "TIE ROD END",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  },
+  {
+    "id": "cat-24",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "name": "WIPER",
+    "description": "",
+    "created_at": "2026-11-24T12:00:00.000Z"
+  }
+]
