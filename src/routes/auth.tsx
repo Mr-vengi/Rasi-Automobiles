@@ -216,35 +216,43 @@ function AuthPage() {
           return;
         }
 
-        // PRIMARY: Send password reset email link
+        // Direct reset if password provided
+        if (password && password.length >= 6) {
+          if (confirmPassword && password !== confirmPassword) {
+            toast.error("Passwords do not match.");
+            setBusy(false);
+            return;
+          }
+
+          await fbResetUserPassword(cleanEmail, password);
+
+          // Also attempt sending Firebase reset email in background (no await block)
+          void sendPasswordResetEmail(auth, cleanEmail).catch(() => {});
+
+          toast.success(`Password updated successfully for ${cleanEmail}! Please sign in with your new password.`, { duration: 6000 });
+          setPassword("");
+          setConfirmPassword("");
+          setMode("signin");
+          return;
+        }
+
+        // If no password was provided, try sending reset email
         try {
           await Promise.race([
             sendPasswordResetEmail(auth, cleanEmail),
-            new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 5000)),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 4000)),
           ]);
-          toast.success(`Password reset link sent to ${cleanEmail}! Please check your inbox or spam folder and click the link to set a new password.`, { duration: 8000 });
-          setMode("signin");
-          return;
-        } catch (err: any) {
-          // If Firebase email fails (config not found / timeout), fall back to direct password update
-          if (err.message === "TIMEOUT" || err.code === "auth/configuration-not-found" || err.message?.includes("configuration-not-found")) {
-            if (password && password.length >= 6) {
-              await fbResetUserPassword(cleanEmail, password);
-              toast.success(`Password updated successfully for ${cleanEmail}! Please sign in with your new password.`, { duration: 6000 });
-              setMode("signin");
-              return;
-            }
-            toast.info(
-              "Could not send reset email (Firebase not configured). Please enter your new password in the field below and click 'Reset Password'.",
-              { duration: 8000 }
-            );
-          } else if (err.code === "auth/user-not-found") {
-            toast.error("No account found with this email. Please verify your email or create a new account.");
-          } else {
-            toast.error(err.message || "Could not send reset email. Please try again.");
-          }
-          return;
+          toast.info(
+            `Password reset link requested for ${cleanEmail}! If email does not arrive in your inbox or spam folder within 1 minute, enter your new password above and click 'Reset & Update Password' to update directly.`,
+            { duration: 10000 }
+          );
+        } catch {
+          toast.info(
+            "Email service is currently delayed. Please enter your new password above and click 'Reset & Update Password' to update directly.",
+            { duration: 8000 }
+          );
         }
+        return;
       }
 
       // 2. SIGN UP (CREATE ACCOUNT) MODE
@@ -496,7 +504,7 @@ function AuthPage() {
       : mode === "signup"
         ? "Request a staff account (requires admin approval by ranjithselvaraj14@gmail.com)."
         : mode === "forgot"
-          ? "Enter your email to receive a secure reset link."
+          ? "Enter your email and new password to reset your account directly."
           : "Sign in to continue to Rasi Automobiles.";
 
   return (
@@ -653,30 +661,56 @@ function AuthPage() {
                   </div>
                 </Field>
                 {mode === "forgot" && (
-                  <Field label="New Password (optional – only if email link fails)">
-                    <div className="relative">
-                      <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        className="pl-10 pr-11"
-                        type={showPassword ? "text" : "password"}
-                        autoComplete="new-password"
-                        minLength={6}
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        placeholder="New password (optional, min 6 characters)"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                        type="button"
-                        onClick={() => setShowPassword((shown) => !shown)}
-                        className="absolute right-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground"
-                      >
-                        {showPassword ? <EyeOff /> : <Eye />}
-                      </Button>
+                  <>
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
+                      <p className="font-semibold flex items-center gap-1.5 text-primary">
+                        <Sparkles className="size-3.5" /> Instant Direct Reset
+                      </p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                        Enter your email and new password to update directly without waiting for email delivery.
+                      </p>
                     </div>
-                  </Field>
+                    <Field label="New Password">
+                      <div className="relative">
+                        <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          className="pl-10 pr-11"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          required
+                          minLength={6}
+                          value={password}
+                          onChange={(event) => setPassword(event.target.value)}
+                          placeholder="New password (min 6 characters)"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          type="button"
+                          onClick={() => setShowPassword((shown) => !shown)}
+                          className="absolute right-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground"
+                        >
+                          {showPassword ? <EyeOff /> : <Eye />}
+                        </Button>
+                      </div>
+                    </Field>
+                    <Field label="Confirm New Password">
+                      <div className="relative">
+                        <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          className="pl-10"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          required
+                          minLength={6}
+                          value={confirmPassword}
+                          onChange={(event) => setConfirmPassword(event.target.value)}
+                          placeholder="Confirm new password"
+                        />
+                      </div>
+                    </Field>
+                  </>
                 )}
                 {mode !== "forgot" && (
                   <Field label="Password">
@@ -724,28 +758,35 @@ function AuthPage() {
               </>
             )}
             <Button type="submit" disabled={busy} className="mt-2 h-11 w-full font-bold">
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create staff account" : mode === "reset-confirm" ? "Update Password" : "Send Password Reset Link"}
+              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create staff account" : mode === "reset-confirm" ? "Update Password" : "Reset & Update Password"}
             </Button>
-            {mode === "forgot" && password.length >= 6 && (
+            {mode === "forgot" && (
               <div className="text-center pt-1">
                 <button
                   type="button"
                   disabled={busy}
                   onClick={async () => {
                     const cleanEmail = email.trim().toLowerCase();
-                    if (!cleanEmail) { toast.error("Please enter your email address first."); return; }
+                    if (!cleanEmail) {
+                      toast.error("Please enter your email address first.");
+                      return;
+                    }
                     setBusy(true);
                     try {
-                      await fbResetUserPassword(cleanEmail, password);
-                      toast.success(`Password updated for ${cleanEmail}! Please sign in with your new password.`, { duration: 6000 });
-                      setMode("signin");
-                    } catch (err: any) {
-                      toast.error(err?.message || "Could not update password. Please try again.");
-                    } finally { setBusy(false); }
+                      await Promise.race([
+                        sendPasswordResetEmail(auth, cleanEmail),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 4000)),
+                      ]);
+                      toast.info(`Reset link requested for ${cleanEmail}! If email is delayed or not received, enter your new password above and click 'Reset & Update Password' directly.`, { duration: 10000 });
+                    } catch {
+                      toast.info("Email service is currently delayed. Please enter your new password above and click 'Reset & Update Password' directly.", { duration: 8000 });
+                    } finally {
+                      setBusy(false);
+                    }
                   }}
                   className="text-xs text-muted-foreground hover:text-primary hover:underline cursor-pointer"
                 >
-                  Or reset password directly with new password above
+                  Or send password reset link to email
                 </button>
               </div>
             )}
