@@ -421,16 +421,16 @@ export async function ensureFirebaseSeeded(): Promise<void> {
 // =================== FIRESTORE CRUD OPERATIONS ===================
 
 export async function fbLoadSettings(): Promise<Tables<"business_settings">> {
-  void withTimeout(
-    getDoc(doc(db, "business_settings", "default")).then((snap) => {
-      if (snap.exists()) {
-        memCache.settings = snap.data() as Tables<"business_settings">;
-        persist("settings", memCache.settings);
-      }
-    }),
-    2000,
-    null
-  );
+  try {
+    const snap = await withTimeout(getDoc(doc(db, "business_settings", "default")), 3500, null);
+    if (snap && snap.exists()) {
+      memCache.settings = snap.data() as Tables<"business_settings">;
+      persist("settings", memCache.settings);
+      return memCache.settings;
+    }
+  } catch (e) {
+    console.warn("Firestore getDoc settings notice:", e);
+  }
   return memCache.settings;
 }
 
@@ -444,17 +444,21 @@ export async function fbUpdateSettings(values: TablesUpdate<"business_settings">
 }
 
 export async function fbLoadCategories(): Promise<Tables<"categories">[]> {
-  void withTimeout(
-    getDocs(query(collection(db, "categories"), orderBy("name"))).then((snap) => {
-      if (!snap.empty) {
-        memCache.categories = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Tables<"categories">);
-        persist("categories", memCache.categories);
-      }
-    }),
-    2000,
-    null
-  );
-  return memCache.categories;
+  try {
+    const snap = await withTimeout(
+      getDocs(query(collection(db, "categories"), orderBy("name"))),
+      3500,
+      null
+    );
+    if (snap && !snap.empty) {
+      memCache.categories = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Tables<"categories">);
+      persist("categories", memCache.categories);
+      return [...memCache.categories];
+    }
+  } catch (e) {
+    console.warn("Firestore getDocs categories notice:", e);
+  }
+  return [...memCache.categories];
 }
 
 export async function fbSaveCategory(name: string): Promise<Tables<"categories">> {
@@ -473,17 +477,21 @@ export async function fbSaveCategory(name: string): Promise<Tables<"categories">
 }
 
 export async function fbLoadBrands(): Promise<Tables<"brands">[]> {
-  void withTimeout(
-    getDocs(query(collection(db, "brands"), orderBy("name"))).then((snap) => {
-      if (!snap.empty) {
-        memCache.brands = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Tables<"brands">);
-        persist("brands", memCache.brands);
-      }
-    }),
-    2000,
-    null
-  );
-  return memCache.brands;
+  try {
+    const snap = await withTimeout(
+      getDocs(query(collection(db, "brands"), orderBy("name"))),
+      3500,
+      null
+    );
+    if (snap && !snap.empty) {
+      memCache.brands = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Tables<"brands">);
+      persist("brands", memCache.brands);
+      return [...memCache.brands];
+    }
+  } catch (e) {
+    console.warn("Firestore getDocs brands notice:", e);
+  }
+  return [...memCache.brands];
 }
 
 export async function fbSaveBrand(name: string): Promise<Tables<"brands">> {
@@ -505,12 +513,51 @@ export async function fbLoadProducts(): Promise<Tables<"products">[]> {
     reconcileCompletedSales();
   } catch { }
 
+  // 1. Primary: Load directly from Firebase Cloud Firestore
+  try {
+    const snap = await withTimeout(getDocs(collection(db, "products")), 4000, null);
+    if (snap && !snap.empty) {
+      const remoteProds = snap.docs
+        .map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            ...data,
+            product_name: data.product_name || "",
+            sku: data.sku || data.product_name || d.id,
+            unit: data.unit || "Piece",
+            purchase_price: Number(data.purchase_price) || 0,
+            selling_price: Number(data.selling_price) || 0,
+            mrp: Number(data.mrp) || Number(data.selling_price) || 0,
+            gst_rate: Number(data.gst_rate) || 18,
+            current_stock: Number(data.current_stock) || 0,
+            minimum_stock: Number(data.minimum_stock) || 0,
+            is_active: data.is_active !== false,
+          } as Tables<"products">;
+        })
+        .filter((p) => !p.archived_at);
+
+      remoteProds.sort((a, b) => a.product_name.localeCompare(b.product_name));
+      memCache.products = remoteProds;
+      persist("products", memCache.products);
+      return [...memCache.products];
+    }
+  } catch (err) {
+    console.warn("Firestore getDocs products notice:", err);
+  }
+
+  // 2. Secondary fallback: check local memory cache if present
+  if (memCache.products.length > 0) {
+    return [...memCache.products];
+  }
+
+  // 3. Fallback to /api/products ONLY if it actually has items (not empty)
   if (typeof window !== "undefined") {
     try {
       const res = await fetch("/api/products");
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data?.products)) {
+        if (Array.isArray(data?.products) && data.products.length > 0) {
           memCache.products = data.products;
           persist("products", memCache.products);
           return [...memCache.products];
@@ -519,21 +566,6 @@ export async function fbLoadProducts(): Promise<Tables<"products">[]> {
     } catch { }
   }
 
-  void withTimeout(
-    getDocs(collection(db, "products")).then((snap) => {
-      if (!snap.empty) {
-        const remoteProds = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }) as Tables<"products">)
-          .filter((p) => !p.archived_at);
-
-        remoteProds.sort((a, b) => a.product_name.localeCompare(b.product_name));
-        memCache.products = remoteProds;
-        persist("products", memCache.products);
-      }
-    }),
-    2000,
-    null
-  );
   return [...memCache.products];
 }
 
@@ -629,21 +661,21 @@ export async function fbClearAllSales(): Promise<void> {
 }
 
 export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
-  void withTimeout(
-    getDocs(collection(db, "customers")).then((snap) => {
-      if (!snap.empty) {
-        const custs = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }) as Tables<"customers">)
-          .filter((c) => !c.archived_at);
-        custs.sort((a, b) => a.customer_name.localeCompare(b.customer_name));
-        memCache.customers = custs;
-        persist("customers", memCache.customers);
-      }
-    }),
-    2000,
-    null
-  );
-  return memCache.customers;
+  try {
+    const snap = await withTimeout(getDocs(collection(db, "customers")), 3500, null);
+    if (snap && !snap.empty) {
+      const custs = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as Tables<"customers">)
+        .filter((c) => !c.archived_at);
+      custs.sort((a, b) => a.customer_name.localeCompare(b.customer_name));
+      memCache.customers = custs;
+      persist("customers", memCache.customers);
+      return [...memCache.customers];
+    }
+  } catch (e) {
+    console.warn("Firestore getDocs customers notice:", e);
+  }
+  return [...memCache.customers];
 }
 
 export async function fbSaveCustomer(
@@ -688,21 +720,21 @@ export async function fbSaveCustomer(
 }
 
 export async function fbLoadSuppliers(): Promise<Tables<"suppliers">[]> {
-  void withTimeout(
-    getDocs(collection(db, "suppliers")).then((snap) => {
-      if (!snap.empty) {
-        const sups = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }) as Tables<"suppliers">)
-          .filter((s) => !s.archived_at);
-        sups.sort((a, b) => a.supplier_name.localeCompare(b.supplier_name));
-        memCache.suppliers = sups;
-        persist("suppliers", memCache.suppliers);
-      }
-    }),
-    2000,
-    null
-  );
-  return memCache.suppliers;
+  try {
+    const snap = await withTimeout(getDocs(collection(db, "suppliers")), 3500, null);
+    if (snap && !snap.empty) {
+      const sups = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as Tables<"suppliers">)
+        .filter((s) => !s.archived_at);
+      sups.sort((a, b) => a.supplier_name.localeCompare(b.supplier_name));
+      memCache.suppliers = sups;
+      persist("suppliers", memCache.suppliers);
+      return [...memCache.suppliers];
+    }
+  } catch (e) {
+    console.warn("Firestore getDocs suppliers notice:", e);
+  }
+  return [...memCache.suppliers];
 }
 
 export async function fbSaveSupplier(
@@ -792,19 +824,22 @@ export async function fbArchiveRecord(
 }
 
 export async function fbLoadExpenses(): Promise<Tables<"expenses">[]> {
-  void withTimeout(
-    getDocs(collection(db, "expenses")).then((snap) => {
-      if (!snap.empty) {
-        const exps = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Tables<"expenses">);
-        exps.sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime());
-        memCache.expenses = exps;
-        persist("expenses", memCache.expenses);
-      }
-    }),
-    2000,
-    null
-  );
-  return memCache.expenses;
+  try {
+    const snap = await withTimeout(
+      getDocs(query(collection(db, "expenses"), orderBy("expense_date", "desc"))),
+      3500,
+      null
+    );
+    if (snap && !snap.empty) {
+      const exps = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Tables<"expenses">);
+      memCache.expenses = exps;
+      persist("expenses", memCache.expenses);
+      return [...memCache.expenses];
+    }
+  } catch (e) {
+    console.warn("Firestore getDocs expenses notice:", e);
+  }
+  return [...memCache.expenses];
 }
 
 export async function fbSaveExpense(
@@ -831,22 +866,21 @@ export async function fbSaveExpense(
 }
 
 export async function fbLoadMovements(productId?: string): Promise<any[]> {
-  void withTimeout(
-    (async () => {
-      const col = collection(db, "inventory_movements");
-      const snap = productId
-        ? await getDocs(query(col, where("product_id", "==", productId)))
-        : await getDocs(col);
-      if (!snap.empty) {
-        const movs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
-        movs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        memCache.movements = movs;
-        persist("movements", memCache.movements);
-      }
-    })(),
-    2000,
-    null
-  );
+  try {
+    const col = collection(db, "inventory_movements");
+    const snap = productId
+      ? await withTimeout(getDocs(query(col, where("product_id", "==", productId))), 3500, null)
+      : await withTimeout(getDocs(col), 3500, null);
+    if (snap && !snap.empty) {
+      const movs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+      movs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      memCache.movements = movs;
+      persist("movements", memCache.movements);
+      return productId ? memCache.movements.filter((m) => m.product_id === productId) : memCache.movements;
+    }
+  } catch (e) {
+    console.warn("Firestore getDocs movements notice:", e);
+  }
   return productId ? memCache.movements.filter((m) => m.product_id === productId) : memCache.movements;
 }
 
@@ -891,26 +925,11 @@ export async function fbAdjustInventory(
 }
 
 export async function fbLoadSales(): Promise<any[]> {
-  // 1. Primary: fetch persisted sales from local backend database
-  if (typeof window !== "undefined") {
-    try {
-      const res = await fetch("/api/sales");
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data?.sales)) {
-          memCache.sales = data.sales;
-          persist("sales", memCache.sales);
-          return memCache.sales;
-        }
-      }
-    } catch { }
-  }
-
-  // 2. Secondary fallback: Firestore if configured/accessible
+  // 1. Primary: Cloud Firestore
   try {
     const snap = await withTimeout(
       getDocs(collection(db, "sales")),
-      3000,
+      3500,
       null
     );
     if (snap && !snap.empty) {
@@ -921,7 +940,27 @@ export async function fbLoadSales(): Promise<any[]> {
       return sales;
     }
   } catch (err) {
-    console.warn("fbLoadSales fetch warning:", err);
+    console.warn("fbLoadSales Firestore notice:", err);
+  }
+
+  // 2. Secondary fallback: local cache
+  if (memCache.sales.length > 0) {
+    return memCache.sales;
+  }
+
+  // 3. Fallback to /api/sales only if non-empty
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/sales");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.sales) && data.sales.length > 0) {
+          memCache.sales = data.sales;
+          persist("sales", memCache.sales);
+          return memCache.sales;
+        }
+      }
+    } catch { }
   }
   return memCache.sales;
 }
@@ -1167,18 +1206,18 @@ export async function fbRecordCustomerPayment(
 }
 
 export async function fbLoadPurchases(): Promise<any[]> {
-  void withTimeout(
-    getDocs(collection(db, "purchases")).then((snap) => {
-      if (!snap.empty) {
-        const purchases = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
-        purchases.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        memCache.purchases = purchases;
-        persist("purchases", memCache.purchases);
-      }
-    }),
-    2000,
-    null
-  );
+  try {
+    const snap = await withTimeout(getDocs(collection(db, "purchases")), 3500, null);
+    if (snap && !snap.empty) {
+      const purchases = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
+      purchases.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      memCache.purchases = purchases;
+      persist("purchases", memCache.purchases);
+      return purchases;
+    }
+  } catch (e) {
+    console.warn("Firestore getDocs purchases notice:", e);
+  }
   return memCache.purchases;
 }
 
