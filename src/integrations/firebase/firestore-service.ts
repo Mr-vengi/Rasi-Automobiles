@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   runTransaction,
+  increment,
 } from "firebase/firestore";
 import { db } from "./client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
@@ -701,6 +702,10 @@ export async function fbSaveCustomer(
     updated_at: now,
     archived_at: null,
   };
+  const billCount = Number(
+    (existing as (Tables<"customers"> & { bill_count?: number }) | undefined)?.bill_count || 0
+  );
+  (payload as Tables<"customers"> & { bill_count?: number }).bill_count = billCount;
 
   const idx = memCache.customers.findIndex((c) => c.id === targetId);
   if (idx >= 0) {
@@ -717,6 +722,31 @@ export async function fbSaveCustomer(
   ).catch((err) => console.warn("Firestore saveCustomer bg warning:", err));
 
   return payload;
+}
+
+export async function fbRecordCustomerBill(customerId: string): Promise<void> {
+  const now = new Date().toISOString();
+  const customerIndex = memCache.customers.findIndex((customer) => customer.id === customerId);
+
+  if (customerIndex >= 0) {
+    const customer = memCache.customers[customerIndex] as Tables<"customers"> & { bill_count?: number };
+    memCache.customers[customerIndex] = {
+      ...customer,
+      bill_count: Number(customer.bill_count || 0) + 1,
+      updated_at: now,
+    } as Tables<"customers">;
+    persist("customers", memCache.customers);
+  }
+
+  void withTimeout(
+    setDoc(
+      doc(db, "customers", customerId),
+      { bill_count: increment(1), updated_at: now },
+      { merge: true }
+    ),
+    2500,
+    null
+  ).catch((err) => console.warn("Firestore customer bill count warning:", err));
 }
 
 export async function fbLoadSuppliers(): Promise<Tables<"suppliers">[]> {
@@ -1366,18 +1396,29 @@ export async function fbRegisterUserApproval(input: {
 }): Promise<void> {
   const email = input.email.toLowerCase().trim();
   const isAdmin = email === "ranjithselvaraj14@gmail.com";
-  const id = input.uid || `usr-${Date.now()}`;
+  const now = new Date().toISOString();
+  let existingApproval: UserApproval | undefined;
+
+  if (typeof window !== "undefined") {
+    try {
+      const existingRaw = localStorage.getItem("rasi_user_approvals");
+      const list: UserApproval[] = existingRaw ? JSON.parse(existingRaw) : [];
+      existingApproval = list.find((user) => user.email.toLowerCase().trim() === email);
+    } catch { }
+  }
+
+  const id = existingApproval?.id || input.uid || `usr-${Date.now()}`;
   const approvalRecord: UserApproval = {
     id,
-    uid: id,
+    uid: input.uid || id,
     email,
-    name: input.name || email.split("@")[0] || "Staff",
+    name: existingApproval?.name || input.name || email.split("@")[0] || "Staff",
     password: input.password || "",
-    status: isAdmin ? "approved" : "pending",
-    role: isAdmin ? "administrator" : "staff",
-    requested_at: new Date().toISOString(),
-    approved_at: isAdmin ? new Date().toISOString() : null,
-    approved_by: isAdmin ? "system" : null,
+    status: isAdmin ? "approved" : existingApproval?.status || "pending",
+    role: isAdmin ? "administrator" : existingApproval?.role || "staff",
+    requested_at: existingApproval?.requested_at || now,
+    approved_at: isAdmin ? now : existingApproval?.approved_at || null,
+    approved_by: isAdmin ? "system" : existingApproval?.approved_by || null,
   };
 
   try {
@@ -1394,7 +1435,10 @@ export async function fbRegisterUserApproval(input: {
     try {
       const existingRaw = localStorage.getItem("rasi_user_approvals");
       const list: UserApproval[] = existingRaw ? JSON.parse(existingRaw) : [];
-      const updated = [approvalRecord, ...list.filter((u) => u.email !== email)];
+      const updated = [
+        approvalRecord,
+        ...list.filter((user) => user.email.toLowerCase().trim() !== email),
+      ];
       localStorage.setItem("rasi_user_approvals", JSON.stringify(updated));
     } catch { }
   }
@@ -1521,7 +1565,7 @@ export async function fbResetUserPassword(
       recordDocId = querySnap.docs[0].id;
       record = querySnap.docs[0].data() as UserApproval;
     }
-  } catch {}
+  } catch { }
 
   if (!record && typeof window !== "undefined") {
     try {
@@ -1530,7 +1574,7 @@ export async function fbResetUserPassword(
         const list: UserApproval[] = JSON.parse(existingRaw);
         record = list.find((u) => u.email.toLowerCase() === cleanEmail) || null;
       }
-    } catch {}
+    } catch { }
   }
 
   const now = new Date().toISOString();
@@ -1566,7 +1610,7 @@ export async function fbResetUserPassword(
       list = list.filter((u) => u.email.toLowerCase() !== cleanEmail);
       list.push(updatedRecord);
       localStorage.setItem("rasi_user_approvals", JSON.stringify(list));
-    } catch {}
+    } catch { }
   }
 
   return {

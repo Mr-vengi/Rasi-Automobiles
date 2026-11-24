@@ -13,6 +13,7 @@ import {
   fbSaveProduct,
   fbLoadCustomers,
   fbSaveCustomer,
+  fbRecordCustomerBill,
   fbLoadSuppliers,
   fbSaveSupplier,
   fbArchiveRecord,
@@ -344,6 +345,10 @@ export async function saveCustomer(values: Omit<TablesInsert<"customers">, "busi
         .single();
     return ensureData(result.data, result.error);
   }
+}
+
+export async function recordCustomerBill(customerId: string): Promise<void> {
+  await fbRecordCustomerBill(customerId);
 }
 
 export async function saveSupplier(values: Omit<TablesInsert<"suppliers">, "business_id">, id?: string): Promise<Tables<"suppliers">> {

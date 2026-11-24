@@ -23,7 +23,7 @@ import {
   RASI_BUSINESS_ID, adjustInventory, createSale, loadBrands, loadCategories,
   loadCustomers, loadEmployees, loadExpenses, loadMovements, loadProducts,
   loadPurchases, loadSales, loadSettings, loadSuppliers, receivePurchase,
-  rasiKeys, saveBrand, saveCategory, saveCustomer, saveExpense, saveProduct,
+  rasiKeys, saveBrand, saveCategory, saveCustomer, recordCustomerBill, saveExpense, saveProduct,
   saveSupplier, updateSettings, syncAllToFirebase, deleteOrArchiveRecord,
   clearAllProducts, clearAllSales, fbDeleteSale,
 } from "@/lib/rasi-data";
@@ -191,12 +191,18 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         const stored = sessionStorage.getItem("rasi_active_cart");
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (parsed?.customerDetails) return parsed.customerDetails;
+          if (parsed?.customerDetails) {
+            return {
+              ...parsed.customerDetails,
+              name: parsed.customerDetails.name === "Walk-in Customer" ? "" : parsed.customerDetails.name,
+              phone: String(parsed.customerDetails.phone || "").replace(/\D/g, "").slice(-10),
+            };
+          }
         }
       } catch {}
     }
     return {
-      name: "Walk-in Customer",
+      name: "",
       phone: "",
       gstin: "",
       address: "",
@@ -628,6 +634,17 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
 
   async function finishSale(status: "draft" | "completed") {
     if (cartRows.length === 0) { toast.error("Add a product to this bill first."); return; }
+    if (status === "completed") {
+      const missingCustomerDetails = [
+        !customerDetails.name.trim() && "customer name",
+        !/^\d{10}$/.test(customerDetails.phone) && "10-digit mobile number",
+        !customerDetails.address.trim() && "address",
+      ].filter(Boolean);
+      if (missingCustomerDetails.length > 0) {
+        toast.error(`Enter ${missingCustomerDetails.join(", ")} before completing the bill.`);
+        return;
+      }
+    }
 
     const exactTotal = totals.total + (extraCharge.enabled ? Number(extraCharge.amount) : 0);
     const effectiveGrandTotal = Math.round(exactTotal);
@@ -663,10 +680,33 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
 
     setSaving(true);
     try {
+      let billingCustomerId = customerId === "walk-in" ? null : customerId;
+      if (status === "completed") {
+        const mobile = customerDetails.phone.replace(/\D/g, "").slice(-10);
+        const existingCustomer = customers.find(
+          (customer) => customer.phone.replace(/\D/g, "").slice(-10) === mobile
+        ) || customers.find((customer) => customer.id === billingCustomerId);
+        const savedCustomer = await saveCustomer(
+          {
+            customer_name: customerDetails.name.trim(),
+            phone: mobile,
+            email: existingCustomer?.email || "",
+            gstin: customerDetails.gstin.trim(),
+            billing_address: customerDetails.address.trim(),
+            customer_type: existingCustomer?.customer_type || "retail",
+            credit_limit: existingCustomer?.credit_limit || 0,
+            state: existingCustomer?.state || "Tamil Nadu",
+            notes: existingCustomer?.notes || "",
+          },
+          existingCustomer?.id || billingCustomerId || undefined
+        );
+        billingCustomerId = savedCustomer.id;
+      }
+
       const saleId = await createSale({
         items: cartRows.map((line) => ({ product_id: line.productId, quantity: line.quantity, discount_rate: line.discountRate })),
         payments,
-        customerId: customerId === "walk-in" ? null : customerId,
+        customerId: billingCustomerId,
         customerDetails: customerDetails.name
           ? {
             customer_name: customerDetails.name,
@@ -682,6 +722,9 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         tenderedAmount: tenderedTotal,
         changeReturned: changeReturn,
       });
+      if (status === "completed" && billingCustomerId) {
+        await recordCustomerBill(billingCustomerId);
+      }
       toast.success(
         status === "draft"
           ? "Bill saved as a draft."
@@ -692,7 +735,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
       setCart([]);
       setPayment(initialPayment());
       setCustomerId("walk-in");
-      setCustomerDetails({ name: "Walk-in Customer", phone: "", gstin: "", address: "" });
+      setCustomerDetails({ name: "", phone: "", gstin: "", address: "" });
       setExtraCharge({ enabled: false, label: "Auto Charge", amount: 0 });
       if (typeof window !== "undefined") {
         try { sessionStorage.removeItem("rasi_active_cart"); } catch {}
@@ -889,13 +932,13 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
 
     const targetCustomerDetails = sale.customers
       ? {
-          name: sale.customers.customer_name || "Walk-in Customer",
-          phone: sale.customers.phone || "",
+          name: sale.customers.customer_name === "Walk-in Customer" ? "" : sale.customers.customer_name || "",
+          phone: sale.customers.phone ? sale.customers.phone.replace(/\D/g, "").slice(-10) : "",
           gstin: sale.customers.gstin || "",
           address: sale.customers.billing_address || "",
         }
       : {
-          name: "Walk-in Customer",
+          name: "",
           phone: "",
           gstin: "",
           address: "",

@@ -10,7 +10,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
-import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles, UserCheck, Wrench, AlertCircle, User } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserCheck, Wrench, AlertCircle, User } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { auth } from "@/integrations/firebase/client";
@@ -216,63 +216,56 @@ function AuthPage() {
           return;
         }
 
-        // Direct reset if password provided
-        if (password && password.length >= 6) {
-          if (confirmPassword && password !== confirmPassword) {
-            toast.error("Passwords do not match.");
-            setBusy(false);
-            return;
-          }
-
-          await fbResetUserPassword(cleanEmail, password);
-
-          // Also attempt sending Firebase reset email in background (no await block)
-          void sendPasswordResetEmail(auth, cleanEmail).catch(() => {});
-
-          toast.success(`Password updated successfully for ${cleanEmail}! Please sign in with your new password.`, { duration: 6000 });
-          setPassword("");
-          setConfirmPassword("");
-          setMode("signin");
-          return;
-        }
-
-        // If no password was provided, try sending reset email
-        try {
-          await Promise.race([
-            sendPasswordResetEmail(auth, cleanEmail),
-            new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 4000)),
-          ]);
-          toast.info(
-            `Password reset link requested for ${cleanEmail}! If email does not arrive in your inbox or spam folder within 1 minute, enter your new password above and click 'Reset & Update Password' to update directly.`,
-            { duration: 10000 }
-          );
-        } catch {
-          toast.info(
-            "Email service is currently delayed. Please enter your new password above and click 'Reset & Update Password' to update directly.",
-            { duration: 8000 }
-          );
-        }
+        await sendPasswordResetEmail(auth, cleanEmail);
+        toast.info(
+          `If an account exists for ${cleanEmail}, a reset link has been sent. Check your inbox and spam folder.`,
+          { duration: 8000 }
+        );
         return;
       }
 
       // 2. SIGN UP (CREATE ACCOUNT) MODE
       if (mode === "signup") {
         const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
-        let userUid = `usr-${Date.now()}`;
+        let userUid: string;
 
         try {
           const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
           userUid = cred.user.uid;
           if (name.trim()) {
-            await updateProfile(cred.user, { displayName: name.trim() });
+            try {
+              await updateProfile(cred.user, { displayName: name.trim() });
+            } catch (profileError) {
+              console.warn("Could not set Firebase profile name:", profileError);
+            }
           }
-        } catch (fbErr: any) {
-          if (fbErr.code === "auth/email-already-in-use") {
+        } catch (fbErr) {
+          const errorCode =
+            typeof fbErr === "object" && fbErr !== null && "code" in fbErr
+              ? String(fbErr.code)
+              : "";
+
+          if (
+            errorCode === "auth/email-already-in-use" ||
+            errorCode === "auth/email-already-exists" ||
+            errorCode === "auth/credential-already-in-use"
+          ) {
             toast.error("An account with this email already exists. Please sign in instead.");
             setMode("signin");
             return;
           }
-          console.warn("Firebase Auth setup notice, using cloud registry fallback:", fbErr.code || fbErr.message);
+
+          if (errorCode === "auth/operation-not-allowed") {
+            throw new Error(
+              "Email/password registration is disabled. Enable Email/Password in Firebase Console > Authentication > Sign-in method."
+            );
+          }
+
+          throw new Error(
+            fbErr instanceof Error
+              ? `Could not create your Firebase Authentication account: ${fbErr.message}`
+              : "Could not create your Firebase Authentication account. Please try again."
+          );
         }
 
         if (isAdmin) {
@@ -504,7 +497,7 @@ function AuthPage() {
       : mode === "signup"
         ? "Request a staff account (requires admin approval by ranjithselvaraj14@gmail.com)."
         : mode === "forgot"
-          ? "Enter your email and new password to reset your account directly."
+          ? "Enter your email address and we will send you a password reset link."
           : "Sign in to continue to Rasi Automobiles.";
 
   return (
@@ -660,58 +653,6 @@ function AuthPage() {
                     />
                   </div>
                 </Field>
-                {mode === "forgot" && (
-                  <>
-                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
-                      <p className="font-semibold flex items-center gap-1.5 text-primary">
-                        <Sparkles className="size-3.5" /> Instant Direct Reset
-                      </p>
-                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                        Enter your email and new password to update directly without waiting for email delivery.
-                      </p>
-                    </div>
-                    <Field label="New Password">
-                      <div className="relative">
-                        <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          className="pl-10 pr-11"
-                          type={showPassword ? "text" : "password"}
-                          autoComplete="new-password"
-                          required
-                          minLength={6}
-                          value={password}
-                          onChange={(event) => setPassword(event.target.value)}
-                          placeholder="New password (min 6 characters)"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={showPassword ? "Hide password" : "Show password"}
-                          type="button"
-                          onClick={() => setShowPassword((shown) => !shown)}
-                          className="absolute right-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground"
-                        >
-                          {showPassword ? <EyeOff /> : <Eye />}
-                        </Button>
-                      </div>
-                    </Field>
-                    <Field label="Confirm New Password">
-                      <div className="relative">
-                        <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          className="pl-10"
-                          type={showPassword ? "text" : "password"}
-                          autoComplete="new-password"
-                          required
-                          minLength={6}
-                          value={confirmPassword}
-                          onChange={(event) => setConfirmPassword(event.target.value)}
-                          placeholder="Confirm new password"
-                        />
-                      </div>
-                    </Field>
-                  </>
-                )}
                 {mode !== "forgot" && (
                   <Field label="Password">
                     <div className="relative">
@@ -758,38 +699,8 @@ function AuthPage() {
               </>
             )}
             <Button type="submit" disabled={busy} className="mt-2 h-11 w-full font-bold">
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create staff account" : mode === "reset-confirm" ? "Update Password" : "Reset & Update Password"}
+              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create staff account" : mode === "reset-confirm" ? "Update Password" : "Send Password Reset Link"}
             </Button>
-            {mode === "forgot" && (
-              <div className="text-center pt-1">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={async () => {
-                    const cleanEmail = email.trim().toLowerCase();
-                    if (!cleanEmail) {
-                      toast.error("Please enter your email address first.");
-                      return;
-                    }
-                    setBusy(true);
-                    try {
-                      await Promise.race([
-                        sendPasswordResetEmail(auth, cleanEmail),
-                        new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), 4000)),
-                      ]);
-                      toast.info(`Reset link requested for ${cleanEmail}! If email is delayed or not received, enter your new password above and click 'Reset & Update Password' directly.`, { duration: 10000 });
-                    } catch {
-                      toast.info("Email service is currently delayed. Please enter your new password above and click 'Reset & Update Password' directly.", { duration: 8000 });
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                  className="text-xs text-muted-foreground hover:text-primary hover:underline cursor-pointer"
-                >
-                  Or send password reset link to email
-                </button>
-              </div>
-            )}
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">

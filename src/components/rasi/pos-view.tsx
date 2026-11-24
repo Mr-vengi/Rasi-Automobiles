@@ -314,7 +314,7 @@ export function PosView({
                   setCustomerId(val);
                   if (val === "walk-in") {
                     setCustomerDetails({
-                      name: "Walk-in Customer",
+                      name: "",
                       phone: "",
                       gstin: "",
                       address: "",
@@ -324,7 +324,7 @@ export function PosView({
                     if (found) {
                       setCustomerDetails({
                         name: found.customer_name,
-                        phone: found.phone || "",
+                        phone: found.phone ? found.phone.replace(/\D/g, "").slice(-10) : "",
                         gstin: found.gstin || "",
                         address: found.billing_address || "",
                       });
@@ -352,7 +352,7 @@ export function PosView({
                 size="sm"
                 onClick={() => {
                   setCustomerId("walk-in");
-                  setCustomerDetails({ name: "Walk-in Customer", phone: "", gstin: "", address: "" });
+                  setCustomerDetails({ name: "", phone: "", gstin: "", address: "" });
                 }}
                 className="h-8 text-[11px] text-muted-foreground px-2"
               >
@@ -369,20 +369,50 @@ export function PosView({
                   Customer Name *
                 </label>
                 <Input
+                  required
                   value={customerDetails.name}
                   onChange={(e) => setCustomerDetails((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g. Ramesh / Walk-in"
+                  placeholder="Customer name"
                   className="h-7 text-xs bg-background"
                 />
               </div>
               <div>
                 <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-0.5">
-                  Mobile / Phone
+                  Mobile / Phone *
                 </label>
                 <Input
+                  type="tel"
+                  autoComplete="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  pattern="[0-9]{10}"
+                  required
                   value={customerDetails.phone}
-                  onChange={(e) => setCustomerDetails((prev) => ({ ...prev, phone: e.target.value }))}
-                  placeholder="e.g. 9876543210"
+                  onChange={(e) => {
+                    const phone = e.target.value.replace(/\D/g, "").slice(0, 10);
+                    const matchedCustomer = phone.length === 10
+                      ? customers.find((customer) => customer.phone.replace(/\D/g, "").slice(-10) === phone)
+                      : undefined;
+
+                    setCustomerId(matchedCustomer?.id || "walk-in");
+                    setCustomerDetails((previous) => {
+                      if (matchedCustomer) {
+                        return {
+                          name: matchedCustomer.customer_name,
+                          phone,
+                          gstin: matchedCustomer.gstin || "",
+                          address: matchedCustomer.billing_address || "",
+                        };
+                      }
+
+                      if (customerId !== "walk-in") {
+                        return { name: "", phone, gstin: "", address: "" };
+                      }
+
+                      return { ...previous, phone };
+                    });
+                  }}
+                  placeholder="10-digit mobile number"
                   className="h-7 text-xs bg-background font-mono"
                 />
               </div>
@@ -402,12 +432,13 @@ export function PosView({
               </div>
               <div>
                 <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-0.5">
-                  Address / City (Optional)
+                  Address / City *
                 </label>
                 <Input
+                  required
                   value={customerDetails.address}
                   onChange={(e) => setCustomerDetails((prev) => ({ ...prev, address: e.target.value }))}
-                  placeholder="e.g. Kallakurichi"
+                  placeholder="Customer address"
                   className="h-7 text-xs bg-background"
                 />
               </div>
@@ -419,7 +450,7 @@ export function PosView({
                 <span className="text-muted-foreground text-[10px]">New customer entered</span>
                 <button
                   type="button"
-                  disabled={quickSaving}
+                  disabled={quickSaving || !customerDetails.phone.trim() || !customerDetails.address.trim()}
                   onClick={async () => {
                     setQuickSaving(true);
                     try {

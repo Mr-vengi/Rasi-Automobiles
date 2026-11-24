@@ -94,6 +94,7 @@ export function PeopleView({
               {isCustomer ? (
                 <>
                   <TableHead className="text-center">Category</TableHead>
+                  <TableHead className="text-center">Bills</TableHead>
                   <TableHead className="text-right">Credit Limit (₹)</TableHead>
                 </>
               ) : (
@@ -140,6 +141,9 @@ export function PeopleView({
                           <Badge variant="outline" className="text-[10px] uppercase">
                             {(item as Customer).customer_type}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-center font-mono font-semibold">
+                          {Number((item as Customer & { bill_count?: number }).bill_count || 0)}
                         </TableCell>
                         <TableCell className="text-right font-mono font-bold text-foreground">
                           ₹{Number((item as Customer).credit_limit || 0).toLocaleString("en-IN")}
