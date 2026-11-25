@@ -404,9 +404,10 @@ if (typeof window !== "undefined") {
   }
 }
 
-export async function fbSyncCustomersToFirebase(): Promise<number> {
+export async function fbSyncCustomersToFirebase(): Promise<{ count: number; error?: string }> {
   await ensureFirebaseAuth().catch(() => { });
   let count = 0;
+  let quotaExceeded = false;
   for (const c of memCache.customers) {
     if (c?.id && !c.archived_at) {
       try {
@@ -416,17 +417,29 @@ export async function fbSyncCustomersToFirebase(): Promise<number> {
           null
         );
         count++;
-      } catch (err) {
+      } catch (err: any) {
+        const msg = String(err?.message || err || "");
+        if (msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED") || err?.code === "resource-exhausted") {
+          quotaExceeded = true;
+          break;
+        }
         console.warn("fbSyncCustomersToFirebase notice for", c.id, err);
       }
     }
   }
-  return count;
+  if (quotaExceeded) {
+    return {
+      count,
+      error: "Firebase Spark daily write quota (20,000 writes) reached. Resets at 1:30 PM IST or upgrade to Blaze plan. All data is safely stored in local backend.",
+    };
+  }
+  return { count };
 }
 
-export async function fbSyncSalesToFirebase(): Promise<number> {
+export async function fbSyncSalesToFirebase(): Promise<{ count: number; error?: string }> {
   await ensureFirebaseAuth().catch(() => { });
   let count = 0;
+  let quotaExceeded = false;
   for (const s of memCache.sales) {
     if (s?.id) {
       try {
@@ -436,12 +449,23 @@ export async function fbSyncSalesToFirebase(): Promise<number> {
           null
         );
         count++;
-      } catch (err) {
+      } catch (err: any) {
+        const msg = String(err?.message || err || "");
+        if (msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED") || err?.code === "resource-exhausted") {
+          quotaExceeded = true;
+          break;
+        }
         console.warn("fbSyncSalesToFirebase notice for", s.id, err);
       }
     }
   }
-  return count;
+  if (quotaExceeded) {
+    return {
+      count,
+      error: "Firebase Spark daily write quota (20,000 writes) reached. Resets at 1:30 PM IST or upgrade to Blaze plan. All data is safely stored in local backend.",
+    };
+  }
+  return { count };
 }
 export async function ensureFirebaseSeeded(): Promise<void> {
   if (seeded) return;
@@ -783,19 +807,6 @@ export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
     }
   } catch (e) {
     console.warn("Firestore getDocs customers notice:", e);
-  }
-
-  // Auto-sync any local/backend customers missing from Cloud Firestore so Firestore collection is always created and populated
-  for (const c of customerMap.values()) {
-    if (!remoteDocIds.has(c.id)) {
-      try {
-        await withTimeout(
-          setDoc(doc(db, "customers", c.id), c, { merge: true }),
-          3500,
-          null
-        );
-      } catch { }
-    }
   }
 
   const list = Array.from(customerMap.values());
@@ -1196,19 +1207,6 @@ export async function fbLoadSales(): Promise<any[]> {
     }
   } catch (err) {
     console.warn("fbLoadSales Firestore notice:", err);
-  }
-
-  // Auto-sync any local/backend sales missing from Cloud Firestore so Firestore is always populated
-  for (const s of salesMap.values()) {
-    if (!remoteDocIds.has(s.id)) {
-      try {
-        await withTimeout(
-          setDoc(doc(db, "sales", s.id), s, { merge: true }),
-          3500,
-          null
-        );
-      } catch { }
-    }
   }
 
   const sales = Array.from(salesMap.values());

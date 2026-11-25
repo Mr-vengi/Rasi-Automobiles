@@ -1247,8 +1247,12 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
               onRefresh={refreshAll}
               onSync={async () => {
                 try {
-                  const count = await fbSyncSalesToFirebase();
-                  toast.success(`${count} invoice(s) synced to Firebase Cloud Firestore.`);
+                  const res = await fbSyncSalesToFirebase();
+                  if (res.error) {
+                    toast.warning(res.error, { duration: 9000 });
+                  } else {
+                    toast.success(`${res.count} invoice(s) synced to Firebase Cloud Firestore.`);
+                  }
                   refreshAll();
                 } catch {
                   toast.error("Failed to sync invoices to Firebase.");
@@ -1281,8 +1285,12 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
               onExport={() => exportToCsv("rasi-customers", customers)}
               onSync={async () => {
                 try {
-                  const count = await fbSyncCustomersToFirebase();
-                  toast.success(`${count} customer(s) synced to Firebase Cloud Firestore.`);
+                  const res = await fbSyncCustomersToFirebase();
+                  if (res.error) {
+                    toast.warning(res.error, { duration: 9000 });
+                  } else {
+                    toast.success(`${res.count} customer(s) synced to Firebase Cloud Firestore.`);
+                  }
                   refreshAll();
                 } catch {
                   toast.error("Failed to sync customers to Firebase.");
