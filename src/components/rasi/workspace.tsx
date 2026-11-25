@@ -254,14 +254,6 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   const [syncingCloud, setSyncingCloud] = useState(false);
   const [cloudNotice, setCloudNotice] = useState(false);
 
-  useEffect(() => {
-    void syncAllToFirebase().then((res) => {
-      if (!res.success && res.isPermissionDenied) {
-        setCloudNotice(true);
-      }
-    });
-  }, []);
-
   async function handleManualSync() {
     setSyncingCloud(true);
     try {

@@ -97,40 +97,7 @@ const INITIAL_SUPPLIERS: Tables<"suppliers">[] = [
   },
 ];
 
-const INITIAL_CUSTOMERS: Tables<"customers">[] = [
-  {
-    id: "cust-walkin",
-    business_id: RASI_BUSINESS_ID,
-    customer_name: "Walk-in Customer",
-    phone: "9999999999",
-    email: "walkin@rasiautomobiles.com",
-    billing_address: "Counter Sale, Salem",
-    gstin: "",
-    customer_type: "retail",
-    credit_limit: 0,
-    state: "Tamil Nadu",
-    notes: "Default walk-in retail counter sales",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    archived_at: null,
-  },
-  {
-    id: "cust-1",
-    business_id: RASI_BUSINESS_ID,
-    customer_name: "Kavin Two Wheeler Workshop",
-    phone: "+91 97890 12345",
-    email: "kavinworkshop@gmail.com",
-    billing_address: "12, Meyyanur Bypass Road, Salem",
-    gstin: "33AAHFK4321B1Z2",
-    customer_type: "workshop",
-    credit_limit: 25000,
-    state: "Tamil Nadu",
-    notes: "Regular mechanic workshop, settlement on Saturdays",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    archived_at: null,
-  },
-];
+const INITIAL_CUSTOMERS: Tables<"customers">[] = [];
 
 const INITIAL_PRODUCTS: Tables<"products">[] = [];
 
@@ -670,7 +637,7 @@ export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
       const custs = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }) as Tables<"customers">)
         .filter((c) => !c.archived_at);
-      custs.sort((a, b) => a.customer_name.localeCompare(b.customer_name));
+      custs.sort((a, b) => (a.customer_name || "").localeCompare(b.customer_name || ""));
       memCache.customers = custs;
       persist("customers", memCache.customers);
       return [...memCache.customers];
@@ -836,7 +803,7 @@ export async function fbArchiveRecord(
     memCache.customers = memCache.customers.filter((c) => c.id !== id);
     persist("customers", memCache.customers);
     try {
-      await withTimeout(deleteDoc(doc(db, "customers", id)), 3000, null);
+      await withTimeout(deleteDoc(doc(db, "customers", id)), 10000, null);
     } catch (e) {
       console.warn("Firestore deleteDoc customer error:", e);
     }
