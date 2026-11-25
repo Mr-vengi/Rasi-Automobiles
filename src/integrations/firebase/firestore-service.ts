@@ -12,7 +12,7 @@ import {
   runTransaction,
   increment,
 } from "firebase/firestore";
-import { db, firebaseConfig } from "./client";
+import { db, firebaseConfig, auth } from "./client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 // Inline to avoid circular-import TDZ during SSR module evaluation
 const RASI_BUSINESS_ID = "00000000-0000-4000-8000-000000000001";
@@ -115,8 +115,15 @@ function withTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promise<T>
 export async function directFirestoreDelete(collectionName: string, docId: string): Promise<boolean> {
   if (typeof window === "undefined" && typeof fetch === "undefined") return false;
   try {
+    const headers: Record<string, string> = {};
+    if (auth.currentUser) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      } catch { }
+    }
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/${collectionName}/${encodeURIComponent(docId)}?key=${firebaseConfig.apiKey}`;
-    const res = await fetch(url, { method: "DELETE" });
+    const res = await fetch(url, { method: "DELETE", headers });
     return res.ok || res.status === 404;
   } catch (err) {
     console.warn(`directFirestoreDelete notice for ${collectionName}/${docId}:`, err);
@@ -374,13 +381,8 @@ export async function syncAllToFirebase(): Promise<FirebaseSyncResult> {
 if (typeof window !== "undefined") {
   try {
     reconcileCompletedSales();
-    void syncAllToFirebase().then((res) => {
-      if (!res.success && res.isPermissionDenied) {
-        console.warn("Cloud Firestore rules appear locked (permission-denied).");
-      }
-    });
   } catch (e) {
-    console.warn("Startup sync notice:", e);
+    console.warn("Startup reconciliation notice:", e);
   }
 }
 
@@ -651,10 +653,20 @@ export async function fbDeleteSale(saleId: string): Promise<void> {
 
 export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
   const customerMap = new Map<string, Tables<"customers">>();
+  let deletedSet = new Set<string>();
+
+  if (typeof window !== "undefined") {
+    try {
+      const arr = JSON.parse(localStorage.getItem("rasi_deleted_customer_ids") || "[]");
+      if (Array.isArray(arr)) deletedSet = new Set(arr);
+    } catch { }
+  }
 
   // 1. Populate from in-memory / localStorage cache
   for (const c of memCache.customers) {
-    if (c?.id && !c.archived_at) customerMap.set(c.id, c);
+    if (c?.id && !c.archived_at && !deletedSet.has(c.id)) {
+      customerMap.set(c.id, c);
+    }
   }
 
   // 2. Fetch from backend /api/customers (persistent data/customers.json)
@@ -665,7 +677,9 @@ export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
         const data = await res.json();
         if (Array.isArray(data?.customers)) {
           for (const c of data.customers) {
-            if (c?.id && !c.archived_at) customerMap.set(c.id, c);
+            if (c?.id && !c.archived_at && !deletedSet.has(c.id)) {
+              customerMap.set(c.id, c);
+            }
           }
         }
       }
@@ -677,6 +691,12 @@ export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
     const snap = await withTimeout(getDocs(collection(db, "customers")), 3500, null);
     if (snap && !snap.empty) {
       for (const d of snap.docs) {
+        if (deletedSet.has(d.id)) {
+          // Clean up lingering deleted doc from Firestore
+          void directFirestoreDelete("customers", d.id);
+          void deleteDoc(doc(db, "customers", d.id)).catch(() => { });
+          continue;
+        }
         const data = { id: d.id, ...d.data() } as Tables<"customers">;
         if (data.id && !data.archived_at) {
           customerMap.set(data.id, data);
@@ -722,6 +742,19 @@ export async function fbSaveCustomer(
   );
   (payload as Tables<"customers"> & { bill_count?: number }).bill_count = billCount;
 
+  // Un-tombstone if it was previously in deleted list
+  if (typeof window !== "undefined") {
+    try {
+      const deletedList: string[] = JSON.parse(localStorage.getItem("rasi_deleted_customer_ids") || "[]");
+      if (deletedList.includes(targetId)) {
+        localStorage.setItem(
+          "rasi_deleted_customer_ids",
+          JSON.stringify(deletedList.filter((item) => item !== targetId))
+        );
+      }
+    } catch { }
+  }
+
   const idx = memCache.customers.findIndex((c) => c.id === targetId);
   if (idx >= 0) {
     memCache.customers[idx] = payload;
@@ -740,11 +773,15 @@ export async function fbSaveCustomer(
     } catch { }
   }
 
-  void withTimeout(
-    setDoc(doc(db, "customers", targetId), payload, { merge: true }),
-    2500,
-    null
-  ).catch((err) => console.warn("Firestore saveCustomer bg warning:", err));
+  try {
+    await withTimeout(
+      setDoc(doc(db, "customers", targetId), payload, { merge: true }),
+      4000,
+      null
+    );
+  } catch (err) {
+    console.warn("Firestore saveCustomer notice:", err);
+  }
 
   return payload;
 }
@@ -859,18 +896,36 @@ export async function fbArchiveRecord(
   } else if (table === "customers") {
     memCache.customers = memCache.customers.filter((c) => c.id !== id);
     persist("customers", memCache.customers);
+
+    // Record tombstone in localStorage so deleted customers never resurrect
     if (typeof window !== "undefined") {
-      void fetch(`/api/customers?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => { });
-      void fetch("/api/delete-customer", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id }),
-      }).catch(() => { });
+      try {
+        const deletedList: string[] = JSON.parse(localStorage.getItem("rasi_deleted_customer_ids") || "[]");
+        if (!deletedList.includes(id)) {
+          deletedList.push(id);
+          localStorage.setItem("rasi_deleted_customer_ids", JSON.stringify(deletedList));
+        }
+      } catch { }
     }
+
+    if (typeof window !== "undefined") {
+      try {
+        await fetch(`/api/customers?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => { });
+        await fetch("/api/delete-customer", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id }),
+        }).catch(() => { });
+      } catch { }
+    }
+
     // Direct HTTPS REST delete executes synchronously on Firestore server
-    void directFirestoreDelete("customers", id);
     try {
-      void deleteDoc(doc(db, "customers", id)).catch(() => { });
+      await directFirestoreDelete("customers", id);
+    } catch { }
+
+    try {
+      await withTimeout(deleteDoc(doc(db, "customers", id)), 3500, null);
     } catch (e) {
       console.warn("Firestore deleteDoc customer error:", e);
     }

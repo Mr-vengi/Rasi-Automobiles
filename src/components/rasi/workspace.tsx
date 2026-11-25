@@ -528,7 +528,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
     try {
       await Promise.race([
         action(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Operation timed out.")), 4000)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Operation timed out.")), 10000)),
       ]);
       toast.success(successMessage);
       setDialog(null);
@@ -1367,7 +1367,10 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
             <CustomerForm
               record={editing && "customer_name" in editing ? editing : null}
               saving={saving}
-              onSubmit={(values) => void submitAction(() => saveCustomer(values, editing?.id), editing ? "Customer updated." : "Customer added.")}
+              onSubmit={(values) => void submitAction(async () => {
+                await saveCustomer(values, editing?.id);
+                await queryClient.invalidateQueries({ queryKey: rasiKeys.customers });
+              }, editing ? "Customer updated." : "Customer added.")}
             />
           )}
           {dialog === "supplier" && (

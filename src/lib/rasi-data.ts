@@ -393,8 +393,8 @@ export async function deleteOrArchiveRecord(
           body: JSON.stringify({ id }),
         }).catch(() => { });
       } else if (table === "customers") {
-        void fetch(`/api/customers?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => { });
-        void fetch("/api/delete-customer", {
+        await fetch(`/api/customers?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => { });
+        await fetch("/api/delete-customer", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ id }),
