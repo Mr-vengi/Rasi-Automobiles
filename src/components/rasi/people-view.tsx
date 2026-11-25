@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Plus, Search, Download, Phone, Mail, MapPin, Edit2, Trash2, Archive, FileText, UserCheck, CreditCard } from "lucide-react";
+import { Plus, Search, Download, Phone, Mail, MapPin, Edit2, Trash2, Archive, FileText, UserCheck, CreditCard, CloudUpload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ interface PeopleViewProps {
   onEdit: (record: Customer | Supplier) => void;
   onArchive: (record: Customer | Supplier) => void;
   onExport: () => void;
+  onSync?: () => void;
 }
 
 export function PeopleView({
@@ -33,6 +34,7 @@ export function PeopleView({
   onEdit,
   onArchive,
   onExport,
+  onSync,
 }: PeopleViewProps) {
   const [localSearch, setLocalSearch] = useState("");
   const [statementRecord, setStatementRecord] = useState<Customer | Supplier | null>(null);
@@ -70,6 +72,12 @@ export function PeopleView({
         </div>
 
         <div className="flex items-center gap-2">
+          {onSync && (
+            <Button variant="outline" size="sm" onClick={onSync} className="h-8 text-xs gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
+              <CloudUpload className="size-3.5" /> Sync to Firebase
+            </Button>
+          )}
+
           <Button variant="outline" size="sm" onClick={onExport} className="h-8 text-xs gap-1.5">
             <Download className="size-3.5" /> Export CSV
           </Button>

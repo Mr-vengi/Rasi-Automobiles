@@ -25,7 +25,7 @@ import {
   loadPurchases, loadSales, loadSettings, loadSuppliers, receivePurchase,
   rasiKeys, saveBrand, saveCategory, saveCustomer, recordCustomerBill, saveExpense, saveProduct,
   saveSupplier, updateSettings, syncAllToFirebase, deleteOrArchiveRecord,
-  clearAllProducts, clearAllSales, fbDeleteSale,
+  clearAllProducts, clearAllSales, fbDeleteSale, fbSyncCustomersToFirebase,
 } from "@/lib/rasi-data";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
@@ -1270,6 +1270,15 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
               onEdit={(record) => openEdit("customer", record)}
               onArchive={(record) => void archiveRecord("customers", record)}
               onExport={() => exportToCsv("rasi-customers", customers)}
+              onSync={async () => {
+                try {
+                  const count = await fbSyncCustomersToFirebase();
+                  toast.success(`${count} customer(s) synced to Firebase Cloud Firestore.`);
+                  refreshAll();
+                } catch {
+                  toast.error("Failed to sync customers to Firebase.");
+                }
+              }}
             />
           )}
           {page === "suppliers" && (

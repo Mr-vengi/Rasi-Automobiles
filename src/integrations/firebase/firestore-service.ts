@@ -386,7 +386,24 @@ if (typeof window !== "undefined") {
   }
 }
 
-// Auto-seed Firebase collections if empty
+export async function fbSyncCustomersToFirebase(): Promise<number> {
+  let count = 0;
+  for (const c of memCache.customers) {
+    if (c?.id && !c.archived_at) {
+      try {
+        await withTimeout(
+          setDoc(doc(db, "customers", c.id), c, { merge: true }),
+          4000,
+          null
+        );
+        count++;
+      } catch (err) {
+        console.warn("fbSyncCustomersToFirebase notice for", c.id, err);
+      }
+    }
+  }
+  return count;
+}
 export async function ensureFirebaseSeeded(): Promise<void> {
   if (seeded) return;
   seeded = true;
@@ -704,11 +721,14 @@ export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
     } catch { }
   }
 
+  const remoteDocIds = new Set<string>();
+
   // 3. Merge from Cloud Firestore
   try {
     const snap = await withTimeout(getDocs(collection(db, "customers")), 3500, null);
     if (snap && !snap.empty) {
       for (const d of snap.docs) {
+        remoteDocIds.add(d.id);
         if (deletedSet.has(d.id)) {
           // Clean up lingering deleted doc from Firestore
           void directFirestoreDelete("customers", d.id);
@@ -723,6 +743,17 @@ export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
     }
   } catch (e) {
     console.warn("Firestore getDocs customers notice:", e);
+  }
+
+  // Auto-sync any local/backend customers missing from Cloud Firestore so Firestore collection is always created and populated
+  for (const c of customerMap.values()) {
+    if (!remoteDocIds.has(c.id)) {
+      void withTimeout(
+        setDoc(doc(db, "customers", c.id), c, { merge: true }),
+        4000,
+        null
+      ).catch(() => { });
+    }
   }
 
   const list = Array.from(customerMap.values());
@@ -1097,6 +1128,8 @@ export async function fbLoadSales(): Promise<any[]> {
     } catch { }
   }
 
+  const remoteDocIds = new Set<string>();
+
   // 3. Merge from Cloud Firestore
   try {
     const snap = await withTimeout(
@@ -1106,6 +1139,7 @@ export async function fbLoadSales(): Promise<any[]> {
     );
     if (snap && !snap.empty) {
       for (const d of snap.docs) {
+        remoteDocIds.add(d.id);
         if (deletedSet.has(d.id)) {
           // Permanently cleanup tombstoned sale from Firestore if it still lingered
           void directFirestoreDelete("sales", d.id);
@@ -1118,6 +1152,17 @@ export async function fbLoadSales(): Promise<any[]> {
     }
   } catch (err) {
     console.warn("fbLoadSales Firestore notice:", err);
+  }
+
+  // Auto-sync any local/backend sales missing from Cloud Firestore so Firestore is always populated
+  for (const s of salesMap.values()) {
+    if (!remoteDocIds.has(s.id)) {
+      void withTimeout(
+        setDoc(doc(db, "sales", s.id), s, { merge: true }),
+        4000,
+        null
+      ).catch(() => { });
+    }
   }
 
   const sales = Array.from(salesMap.values());
