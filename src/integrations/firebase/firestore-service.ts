@@ -1175,6 +1175,7 @@ export async function fbCreateSale(input: {
     extra_charge_amount: extraChargeAmount > 0 ? extraChargeAmount : 0,
     payment_method: defaultPaymentMethod,
     payments: input.payments,
+    sale_payments: input.payments,
     sale_items: saleItems,
     customers: resolvedCustomer,
     created_at: now,

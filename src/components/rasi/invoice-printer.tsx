@@ -192,7 +192,34 @@ export function InvoicePrinter({
   });
 
   const items = sale.sale_items || [];
-  const payments = sale.sale_payments || [];
+  const rawPayments =
+    Array.isArray((sale as any).payments) && (sale as any).payments.length > 0
+      ? (sale as any).payments
+      : Array.isArray(sale.sale_payments) && sale.sale_payments.length > 0
+        ? sale.sale_payments
+        : (sale as any).payment_method
+          ? [{ payment_method: (sale as any).payment_method, amount: Number(sale.paid_amount || sale.total_amount || 0) }]
+          : [];
+  const payments = rawPayments;
+
+  const paymentMode =
+    payments.length > 0
+      ? payments
+          .map((p: any) => {
+            const m = String(p.payment_method || "").toLowerCase().trim();
+            if (m === "upi") return "UPI";
+            if (m === "cash") return "Cash";
+            if (m === "card") return "Card";
+            if (m === "bank_transfer" || m === "bank") return "Bank Transfer";
+            return String(p.payment_method || "").toUpperCase();
+          })
+          .filter(Boolean)
+          .join(", ")
+      : (sale as any).payment_method
+        ? (String((sale as any).payment_method).toLowerCase() === "upi"
+            ? "UPI"
+            : String((sale as any).payment_method).toUpperCase())
+        : "Cash";
 
   const subtotal = Number(sale.subtotal || 0);
   const discountAmount = Number(sale.discount_amount || 0);
@@ -457,7 +484,7 @@ export function InvoicePrinter({
                   <div className="flex"><span className="w-28 font-medium text-slate-700">Place of Supply</span><span>: {customerState || state} ({stateCode || "33"})</span></div>
                 </div>
                 <div className="p-2 space-y-0.5">
-                  <div className="flex"><span className="w-28 font-medium text-slate-700">Payment Mode</span><span>: <strong className="uppercase">{payments.map((p) => p.payment_method).join(", ") || "Cash"}</strong></span></div>
+                  <div className="flex"><span className="w-28 font-medium text-slate-700">Payment Mode</span><span>: <strong className="uppercase">{paymentMode}</strong></span></div>
                   <div className="flex"><span className="w-28 font-medium text-slate-700">Payment Status</span><span>: <strong className={isPaid ? "text-emerald-700 font-bold" : "text-amber-700 font-bold"}>{isPaid ? "Paid in Full" : "Pending / Credit"}</strong></span></div>
                   <div className="flex"><span className="w-28 font-medium text-slate-700">Reverse Charge</span><span>: No</span></div>
                 </div>
@@ -839,7 +866,7 @@ export function InvoicePrinter({
                 </div>
               )}
               <div className="flex justify-between font-bold pt-0.5">
-                <span>Paid:</span>
+                <span>Paid ({paymentMode}):</span>
                 <span>₹{paidAmount.toFixed(2)}</span>
               </div>
               {changeReturned > 0 && (
