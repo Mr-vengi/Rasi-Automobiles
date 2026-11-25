@@ -1,200 +1,72 @@
 [
   {
-    "id": "sale-1795518898151",
-    "tendered_amount": 2000,
-    "balance_due": 0,
-    "extra_charge_amount": 0,
-    "taxable_amount": 1045.6100000000001,
-    "is_interstate": false,
-    "sale_date": "2026-11-24T11:14:58.151Z",
-    "change_returned": 766.18,
-    "status": "completed",
-    "sale_items": [
-      {
-        "sale_id": "sale-1795518898151",
-        "discount_amount": 0,
-        "part_number": "SPICE-7525",
-        "product_id": "prod-spice-7525-5",
-        "unit_price": 670,
-        "igst_amount": 0,
-        "quantity": 1,
-        "cgst_amount": 60.3,
-        "line_total": 790.6,
-        "unit_cost": 0,
-        "gst_rate": 18,
-        "id": "item-sale-1795518898151-1",
-        "product_name": "22\"U CLAM KSS",
-        "hsn_code": "8708",
-        "discount_rate": 0,
-        "total_amount": 790.6,
-        "sgst_amount": 60.3,
-        "taxable_amount": 670
-      },
-      {
-        "cgst_amount": 8.1,
-        "igst_amount": 0,
-        "product_name": "18MM SOCKET",
-        "line_total": 106.2,
-        "quantity": 1,
-        "id": "item-sale-1795518898151-2",
-        "gst_rate": 18,
-        "sale_id": "sale-1795518898151",
-        "total_amount": 106.2,
-        "discount_amount": 0,
-        "part_number": "18MM",
-        "discount_rate": 0,
-        "unit_price": 90,
-        "product_id": "prod-18mm-15",
-        "taxable_amount": 90,
-        "sgst_amount": 8.1,
-        "hsn_code": "8204",
-        "unit_cost": 0
-      },
-      {
-        "taxable_amount": 25.61,
-        "quantity": 1,
-        "part_number": "10*11 S",
-        "sale_id": "sale-1795518898151",
-        "gst_rate": 18,
-        "total_amount": 30.2198,
-        "discount_amount": 0,
-        "cgst_amount": 2.3049,
-        "igst_amount": 0,
-        "product_name": "10*11 DE SPANNER",
-        "unit_cost": 0,
-        "unit_price": 25.61,
-        "product_id": "prod-10-11-s-12",
-        "line_total": 30.2198,
-        "hsn_code": "8204",
-        "sgst_amount": 2.3049,
-        "id": "item-sale-1795518898151-3",
-        "discount_rate": 0
-      },
-      {
-        "product_id": "prod-10-l-11",
-        "unit_price": 260,
-        "igst_amount": 0,
-        "cgst_amount": 23.4,
-        "discount_rate": 0,
-        "unit_cost": 0,
-        "taxable_amount": 260,
-        "part_number": "10\"L",
-        "id": "item-sale-1795518898151-4",
-        "quantity": 1,
-        "discount_amount": 0,
-        "line_total": 306.8,
-        "gst_rate": 18,
-        "product_name": "10\"L RODE HANDLE",
-        "hsn_code": "8204",
-        "sale_id": "sale-1795518898151",
-        "sgst_amount": 23.4,
-        "total_amount": 306.8
-      }
-    ],
-    "payments": [
-      {
-        "reference_number": "",
-        "amount": 1233.82,
-        "payment_method": "cash"
-      },
-      {
-        "payment_method": "cash",
-        "created_at": "2026-11-24T11:15:13.417Z",
-        "reference_number": "",
-        "amount": 1
-      }
-    ],
-    "subtotal": 1045.6100000000001,
-    "payment_method": "cash",
-    "updated_at": "2026-11-24T11:14:58.151Z",
-    "cgst_amount": 94.10489999999999,
-    "invoice_number": "RA-2026-1003",
-    "business_id": "00000000-0000-4000-8000-000000000001",
-    "total_amount": 1234,
-    "discount_amount": 0,
-    "customer_id": null,
-    "sgst_amount": 94.10489999999999,
-    "extra_charge_label": null,
-    "round_off": 0.18,
-    "igst_amount": 0,
-    "customers": {
-      "state": "Tamil Nadu",
-      "customer_name": "Walk-in Customer",
-      "billing_address": "",
-      "gstin": "",
-      "phone": ""
-    },
-    "paid_amount": 1234.82,
-    "created_at": "2026-11-24T11:14:58.151Z"
-  },
-  {
-    "id": "sale-1795577671855",
+    "id": "sale-1795584066186",
     "balance_due": 0,
     "business_id": "00000000-0000-4000-8000-000000000001",
-    "cgst_amount": 21.599999999999998,
+    "cgst_amount": 2.3049,
     "change_returned": 0,
-    "created_at": "2026-11-25T03:34:31.855Z",
-    "customer_id": "cust-1795577671787",
+    "created_at": "2026-11-25T05:21:06.186Z",
+    "customer_id": "cust-1795584062159",
     "customers": {
       "billing_address": "317,CINNA AGRAHARA STREET,THANDALAI,VILUPPURAM(D/T),TAMIL NADU,606213",
       "customer_name": "VENKATESH K",
       "gstin": "",
-      "phone": "9112345600",
+      "phone": "9112345643",
       "state": "Tamil Nadu"
     },
     "discount_amount": 0,
     "extra_charge_amount": 0,
     "extra_charge_label": null,
     "igst_amount": 0,
-    "invoice_number": "RA-2026-1003",
+    "invoice_number": "RA-2026-1001",
     "is_interstate": false,
-    "paid_amount": 283,
-    "payment_method": "upi",
+    "paid_amount": 30,
+    "payment_method": "cash",
     "payments": [
       {
-        "payment_method": "upi",
-        "amount": 283,
+        "payment_method": "cash",
+        "amount": 30,
         "reference_number": ""
       }
     ],
-    "round_off": -0.2,
-    "sale_date": "2026-11-25T03:34:31.855Z",
+    "round_off": -0.22,
+    "sale_date": "2026-11-25T05:21:06.186Z",
     "sale_items": [
       {
-        "id": "item-sale-1795577671855-1",
-        "sale_id": "sale-1795577671855",
-        "product_id": "prod-24-27-17",
-        "product_name": "24*27 RING",
-        "part_number": "24*27",
+        "id": "item-sale-1795584066186-1",
+        "sale_id": "sale-1795584066186",
+        "product_id": "prod-10-11-s-12",
+        "product_name": "10*11 DE SPANNER",
+        "part_number": "10*11 S",
         "hsn_code": "8204",
         "quantity": 1,
-        "unit_price": 240,
+        "unit_price": 25.61,
         "unit_cost": 0,
         "discount_rate": 0,
         "discount_amount": 0,
-        "taxable_amount": 240,
+        "taxable_amount": 25.61,
         "gst_rate": 18,
-        "cgst_amount": 21.599999999999998,
-        "sgst_amount": 21.599999999999998,
+        "cgst_amount": 2.3049,
+        "sgst_amount": 2.3049,
         "igst_amount": 0,
-        "total_amount": 283.2,
-        "line_total": 283.2
+        "total_amount": 30.2198,
+        "line_total": 30.2198
       }
     ],
     "sale_payments": [
       {
-        "payment_method": "upi",
-        "amount": 283,
+        "payment_method": "cash",
+        "amount": 30,
         "reference_number": ""
       }
     ],
-    "sgst_amount": 21.599999999999998,
+    "sgst_amount": 2.3049,
     "status": "completed",
-    "subtotal": 240,
-    "taxable_amount": 240,
-    "tendered_amount": 283,
-    "total_amount": 283,
-    "updated_at": "2026-11-25T03:34:31.855Z"
+    "subtotal": 25.61,
+    "taxable_amount": 25.61,
+    "tendered_amount": 30,
+    "total_amount": 30,
+    "updated_at": "2026-11-25T05:21:06.186Z"
   },
   {
     "id": "sale-1795580980643",
@@ -259,273 +131,5 @@
     "tendered_amount": 0,
     "total_amount": 106,
     "updated_at": "2026-11-25T04:29:40.643Z"
-  },
-  {
-    "id": "sale-1795580799134",
-    "balance_due": 0,
-    "business_id": "00000000-0000-4000-8000-000000000001",
-    "cgst_amount": 21.599999999999998,
-    "change_returned": 2,
-    "created_at": "2026-11-25T04:26:39.134Z",
-    "customer_id": "cust-1795580795095",
-    "customers": {
-      "billing_address": "k",
-      "customer_name": "j",
-      "gstin": "",
-      "phone": "9098213425",
-      "state": "Tamil Nadu"
-    },
-    "discount_amount": 0,
-    "extra_charge_amount": 0,
-    "extra_charge_label": null,
-    "igst_amount": 0,
-    "invoice_number": "RA-2026-1006",
-    "is_interstate": false,
-    "paid_amount": 283,
-    "payment_method": "cash",
-    "payments": [
-      {
-        "payment_method": "cash",
-        "amount": 283,
-        "reference_number": ""
-      }
-    ],
-    "round_off": -0.2,
-    "sale_date": "2026-11-25T04:26:39.134Z",
-    "sale_items": [
-      {
-        "id": "item-sale-1795580799134-1",
-        "sale_id": "sale-1795580799134",
-        "product_id": "prod-24-27-17",
-        "product_name": "24*27 RING",
-        "part_number": "24*27",
-        "hsn_code": "8204",
-        "quantity": 1,
-        "unit_price": 240,
-        "unit_cost": 0,
-        "discount_rate": 0,
-        "discount_amount": 0,
-        "taxable_amount": 240,
-        "gst_rate": 18,
-        "cgst_amount": 21.599999999999998,
-        "sgst_amount": 21.599999999999998,
-        "igst_amount": 0,
-        "total_amount": 283.2,
-        "line_total": 283.2
-      }
-    ],
-    "sale_payments": [
-      {
-        "payment_method": "cash",
-        "amount": 283,
-        "reference_number": ""
-      }
-    ],
-    "sgst_amount": 21.599999999999998,
-    "status": "completed",
-    "subtotal": 240,
-    "taxable_amount": 240,
-    "tendered_amount": 285,
-    "total_amount": 283,
-    "updated_at": "2026-11-25T04:26:39.134Z"
-  },
-  {
-    "id": "sale-1795579603395",
-    "balance_due": 0,
-    "business_id": "00000000-0000-4000-8000-000000000001",
-    "cgst_amount": 21.599999999999998,
-    "change_returned": 0,
-    "created_at": "2026-11-25T04:06:43.395Z",
-    "customer_id": "cust-1795576729719",
-    "customers": {
-      "billing_address": "Bajanai kovil street",
-      "customer_name": "JAYASREE D",
-      "gstin": "",
-      "phone": "9342661192",
-      "state": "Tamil Nadu"
-    },
-    "discount_amount": 0,
-    "extra_charge_amount": 0,
-    "extra_charge_label": null,
-    "igst_amount": 0,
-    "invoice_number": "RA-2026-1005",
-    "is_interstate": false,
-    "paid_amount": 283,
-    "payment_method": "cash",
-    "payments": [
-      {
-        "payment_method": "cash",
-        "amount": 283,
-        "reference_number": ""
-      }
-    ],
-    "round_off": -0.2,
-    "sale_date": "2026-11-25T04:06:43.395Z",
-    "sale_items": [
-      {
-        "id": "item-sale-1795579603395-1",
-        "sale_id": "sale-1795579603395",
-        "product_id": "prod-24-27-17",
-        "product_name": "24*27 RING",
-        "part_number": "24*27",
-        "hsn_code": "8204",
-        "quantity": 1,
-        "unit_price": 240,
-        "unit_cost": 0,
-        "discount_rate": 0,
-        "discount_amount": 0,
-        "taxable_amount": 240,
-        "gst_rate": 18,
-        "cgst_amount": 21.599999999999998,
-        "sgst_amount": 21.599999999999998,
-        "igst_amount": 0,
-        "total_amount": 283.2,
-        "line_total": 283.2
-      }
-    ],
-    "sale_payments": [
-      {
-        "payment_method": "cash",
-        "amount": 283,
-        "reference_number": ""
-      }
-    ],
-    "sgst_amount": 21.599999999999998,
-    "status": "completed",
-    "subtotal": 240,
-    "taxable_amount": 240,
-    "tendered_amount": 283,
-    "total_amount": 283,
-    "updated_at": "2026-11-25T04:06:43.395Z"
-  },
-  {
-    "id": "sale-1795578391674",
-    "balance_due": 0,
-    "business_id": "00000000-0000-4000-8000-000000000001",
-    "cgst_amount": 17.099999999999998,
-    "change_returned": 0,
-    "created_at": "2026-11-25T03:46:31.674Z",
-    "customer_id": "cust-1795578391640",
-    "customers": {
-      "billing_address": "KALLAI",
-      "customer_name": "KA",
-      "gstin": "",
-      "phone": "9876234211",
-      "state": "Tamil Nadu"
-    },
-    "discount_amount": 0,
-    "extra_charge_amount": 0,
-    "extra_charge_label": null,
-    "igst_amount": 0,
-    "invoice_number": "RA-2026-1004",
-    "is_interstate": false,
-    "paid_amount": 224,
-    "payment_method": "card",
-    "payments": [
-      {
-        "payment_method": "card",
-        "amount": 224,
-        "reference_number": ""
-      }
-    ],
-    "round_off": -0.2,
-    "sale_date": "2026-11-25T03:46:31.674Z",
-    "sale_items": [
-      {
-        "id": "item-sale-1795578391674-1",
-        "sale_id": "sale-1795578391674",
-        "product_id": "prod-1535-18-l-18",
-        "product_name": "18 SIZE 'L' WHEEL SPANNER",
-        "part_number": "1535-18.L",
-        "hsn_code": "8204",
-        "quantity": 1,
-        "unit_price": 190,
-        "unit_cost": 0,
-        "discount_rate": 0,
-        "discount_amount": 0,
-        "taxable_amount": 190,
-        "gst_rate": 18,
-        "cgst_amount": 17.099999999999998,
-        "sgst_amount": 17.099999999999998,
-        "igst_amount": 0,
-        "total_amount": 224.2,
-        "line_total": 224.2
-      }
-    ],
-    "sale_payments": [
-      {
-        "payment_method": "card",
-        "amount": 224,
-        "reference_number": ""
-      }
-    ],
-    "sgst_amount": 17.099999999999998,
-    "status": "completed",
-    "subtotal": 190,
-    "taxable_amount": 190,
-    "tendered_amount": 224,
-    "total_amount": 224,
-    "updated_at": "2026-11-25T03:46:31.674Z"
-  },
-  {
-    "id": "sale-1795501118948",
-    "created_at": "2026-11-24T06:18:38.948Z",
-    "is_interstate": false,
-    "subtotal": 300,
-    "change_returned": 46,
-    "cgst_amount": 27,
-    "sale_date": "2026-11-24T06:18:38.948Z",
-    "total_amount": 354,
-    "payments": [
-      {
-        "reference_number": "",
-        "amount": 354,
-        "payment_method": "cash"
-      }
-    ],
-    "discount_amount": 0,
-    "sgst_amount": 27,
-    "balance_due": 0,
-    "business_id": "00000000-0000-4000-8000-000000000001",
-    "taxable_amount": 300,
-    "extra_charge_amount": 0,
-    "status": "completed",
-    "sale_items": [
-      {
-        "total_amount": 354,
-        "hsn_code": "8708",
-        "sale_id": "sale-1795501118948",
-        "gst_rate": 18,
-        "id": "item-sale-1795501118948-1",
-        "unit_cost": 120,
-        "product_name": "1",
-        "sgst_amount": 27,
-        "unit_price": 300,
-        "quantity": 1,
-        "product_id": "prod-1795499878586",
-        "discount_amount": 0,
-        "cgst_amount": 27,
-        "discount_rate": 0,
-        "igst_amount": 0,
-        "taxable_amount": 300,
-        "part_number": ""
-      }
-    ],
-    "payment_method": "cash",
-    "extra_charge_label": null,
-    "round_off": 0,
-    "invoice_number": "RA-2026-1001",
-    "tendered_amount": 400,
-    "paid_amount": 354,
-    "igst_amount": 0,
-    "updated_at": "2026-11-24T06:18:38.948Z",
-    "customers": {
-      "state": "Tamil Nadu",
-      "gstin": "",
-      "phone": "9342661192",
-      "customer_name": "Venkatesh K",
-      "billing_address": ""
-    },
-    "customer_id": null
   }
 ]
