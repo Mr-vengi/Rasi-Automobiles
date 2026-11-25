@@ -59,6 +59,8 @@ interface PosViewProps {
   updateCartLine: (productId: string, changes: { quantity?: number; discountRate?: number }) => void;
   addToCart: (product: Product) => void;
   onRemove: (productId: string) => void;
+  onClearCart?: () => void;
+  isResumed?: boolean;
   onSaveDraft: () => void;
   onComplete: () => void;
   loading: boolean;
@@ -86,6 +88,8 @@ export function PosView({
   updateCartLine,
   addToCart,
   onRemove,
+  onClearCart,
+  isResumed = false,
   onSaveDraft,
   onComplete,
   loading,
@@ -290,19 +294,30 @@ export function PosView({
       <div className="space-y-4 lg:col-span-5 rounded-xl border bg-card p-4 shadow-sm">
         {/* Customer & Tax Settings Bar (Visible By Default Inline) */}
         <div className="space-y-2.5 pb-3 border-b">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <User className="size-3.5 text-primary" /> Customer Details
             </span>
-            <label className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground text-xs">
-              <input
-                type="checkbox"
-                checked={interstate}
-                onChange={(e) => setInterstate(e.target.checked)}
-                className="rounded border-border"
-              />
-              <span className="text-[11px]">IGST (Inter-state)</span>
-            </label>
+            <div className="flex items-center gap-3">
+              {(cart.length > 0 || isResumed) && onClearCart && (
+                <button
+                  type="button"
+                  onClick={onClearCart}
+                  className="text-[11px] font-semibold text-destructive hover:underline"
+                >
+                  Clear bill
+                </button>
+              )}
+              <label className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground text-xs">
+                <input
+                  type="checkbox"
+                  checked={interstate}
+                  onChange={(e) => setInterstate(e.target.checked)}
+                  className="rounded border-border"
+                />
+                <span className="text-[11px]">IGST (Inter-state)</span>
+              </label>
+            </div>
           </div>
 
           {/* Customer Selection Dropdown */}

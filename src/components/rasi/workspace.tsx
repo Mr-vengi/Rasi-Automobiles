@@ -452,6 +452,45 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
     void queryClient.invalidateQueries({ queryKey: rasiKeys.all });
   }
 
+  function clearActiveCart() {
+    setCart([]);
+    setPayment(initialPayment());
+    setCustomerId("walk-in");
+    setCustomerDetails({ name: "", phone: "", gstin: "", address: "" });
+    setExtraCharge({ enabled: false, label: "Auto Charge", amount: 0 });
+    setInterstate(false);
+    setResumeSaleId(null);
+    if (typeof window !== "undefined") {
+      try { sessionStorage.removeItem("rasi_active_cart"); } catch {}
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (cart.length === 0) {
+      try { sessionStorage.removeItem("rasi_active_cart"); } catch {}
+      if (resumeSaleId) {
+        setResumeSaleId(null);
+      }
+      return;
+    }
+    if (resumeSaleId) {
+      try {
+        sessionStorage.setItem(
+          "rasi_active_cart",
+          JSON.stringify({
+            saleId: resumeSaleId,
+            items: cart,
+            customerId,
+            customerDetails,
+            extraCharge,
+            interstate,
+          })
+        );
+      } catch {}
+    }
+  }, [cart, resumeSaleId, customerId, customerDetails, extraCharge, interstate]);
+
   function changePage(next: Page, preserveSelection = false) {
     if (!isOwnerAdmin && !["pos", "products", "inventory"].includes(next)) {
       next = "pos";
@@ -469,12 +508,8 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         window.history.pushState(null, "", targetUrl);
       }
     }
-    if (next === "pos" && !preserveSelection && !resumeSaleId) {
-      setCart([]);
-      setPayment(initialPayment());
-      if (typeof window !== "undefined") {
-        try { sessionStorage.removeItem("rasi_active_cart"); } catch {}
-      }
+    if (next === "pos" && !preserveSelection) {
+      clearActiveCart();
     }
   }
 
@@ -1171,6 +1206,8 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
               updateCartLine={updateCartLine}
               addToCart={addToCart}
               onRemove={(id) => setCart((current) => current.filter((line) => line.productId !== id))}
+              onClearCart={clearActiveCart}
+              isResumed={Boolean(resumeSaleId)}
               onSaveDraft={() => void finishSale("draft")}
               onComplete={() => void finishSale("completed")}
               loading={saving}
