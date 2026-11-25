@@ -53,6 +53,7 @@ const STAFF_PERMISSIONS = [
   "sales:create",
   "products:read",
   "inventory:read",
+  "customers:read",
 ];
 
 export const Route = createFileRoute("/_authenticated")({
