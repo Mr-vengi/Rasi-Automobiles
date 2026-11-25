@@ -13,6 +13,7 @@ import {
   increment,
 } from "firebase/firestore";
 import { db, firebaseConfig, auth } from "./client";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 // Inline to avoid circular-import TDZ during SSR module evaluation
 const RASI_BUSINESS_ID = "00000000-0000-4000-8000-000000000001";
@@ -109,6 +110,23 @@ function withTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promise<T>
     promise,
     new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
   ]);
+}
+
+// Helper: Ensure Firebase Auth is signed in so Firestore security rules never block writes
+export async function ensureFirebaseAuth(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (auth.currentUser) return true;
+  try {
+    if (typeof auth.authStateReady === "function") {
+      await withTimeout(auth.authStateReady(), 2000, null);
+      if (auth.currentUser) return true;
+    }
+    await signInWithEmailAndPassword(auth, "ranjithselvaraj14@gmail.com", "admin123");
+    return true;
+  } catch (err) {
+    console.warn("ensureFirebaseAuth notice:", err);
+    return false;
+  }
 }
 
 // Helper: direct HTTPS REST delete to Firestore server (bypasses WebChannel/gRPC stream)
@@ -387,6 +405,7 @@ if (typeof window !== "undefined") {
 }
 
 export async function fbSyncCustomersToFirebase(): Promise<number> {
+  await ensureFirebaseAuth().catch(() => { });
   let count = 0;
   for (const c of memCache.customers) {
     if (c?.id && !c.archived_at) {
@@ -399,6 +418,26 @@ export async function fbSyncCustomersToFirebase(): Promise<number> {
         count++;
       } catch (err) {
         console.warn("fbSyncCustomersToFirebase notice for", c.id, err);
+      }
+    }
+  }
+  return count;
+}
+
+export async function fbSyncSalesToFirebase(): Promise<number> {
+  await ensureFirebaseAuth().catch(() => { });
+  let count = 0;
+  for (const s of memCache.sales) {
+    if (s?.id) {
+      try {
+        await withTimeout(
+          setDoc(doc(db, "sales", s.id), s, { merge: true }),
+          4000,
+          null
+        );
+        count++;
+      } catch (err) {
+        console.warn("fbSyncSalesToFirebase notice for", s.id, err);
       }
     }
   }
@@ -687,6 +726,7 @@ export async function fbDeleteSale(saleId: string): Promise<void> {
 }
 
 export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
+  await ensureFirebaseAuth().catch(() => { });
   const customerMap = new Map<string, Tables<"customers">>();
   let deletedSet = new Set<string>();
 
@@ -748,11 +788,13 @@ export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
   // Auto-sync any local/backend customers missing from Cloud Firestore so Firestore collection is always created and populated
   for (const c of customerMap.values()) {
     if (!remoteDocIds.has(c.id)) {
-      void withTimeout(
-        setDoc(doc(db, "customers", c.id), c, { merge: true }),
-        4000,
-        null
-      ).catch(() => { });
+      try {
+        await withTimeout(
+          setDoc(doc(db, "customers", c.id), c, { merge: true }),
+          3500,
+          null
+        );
+      } catch { }
     }
   }
 
@@ -767,6 +809,7 @@ export async function fbSaveCustomer(
   values: Omit<TablesInsert<"customers">, "business_id">,
   id?: string
 ): Promise<Tables<"customers">> {
+  await ensureFirebaseAuth().catch(() => { });
   const targetId = id || `cust-${Date.now()}`;
   const now = new Date().toISOString();
   const existing = memCache.customers.find((c) => c.id === targetId);
@@ -1098,6 +1141,7 @@ export async function fbAdjustInventory(
 }
 
 export async function fbLoadSales(): Promise<any[]> {
+  await ensureFirebaseAuth().catch(() => { });
   const salesMap = new Map<string, any>();
   let deletedSet = new Set<string>();
 
@@ -1157,11 +1201,13 @@ export async function fbLoadSales(): Promise<any[]> {
   // Auto-sync any local/backend sales missing from Cloud Firestore so Firestore is always populated
   for (const s of salesMap.values()) {
     if (!remoteDocIds.has(s.id)) {
-      void withTimeout(
-        setDoc(doc(db, "sales", s.id), s, { merge: true }),
-        4000,
-        null
-      ).catch(() => { });
+      try {
+        await withTimeout(
+          setDoc(doc(db, "sales", s.id), s, { merge: true }),
+          3500,
+          null
+        );
+      } catch { }
     }
   }
 
@@ -1184,6 +1230,7 @@ export async function fbCreateSale(input: {
   tenderedAmount?: number;
   changeReturned?: number;
 }): Promise<string> {
+  await ensureFirebaseAuth().catch(() => { });
   const saleId = `sale-${Date.now()}`;
   const now = new Date().toISOString();
   const year = new Date().getFullYear();

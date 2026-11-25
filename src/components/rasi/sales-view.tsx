@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import {
   Search, Printer, Download, Share2, Plus, Eye, Play, Undo2,
-  CheckCircle2, Clock, Ban, ArrowUpRight, DollarSign, Trash2
+  CheckCircle2, Clock, Ban, ArrowUpRight, DollarSign, Trash2, CloudUpload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,7 @@ interface SalesViewProps {
   onClearAll?: () => void;
   settings?: Tables<"business_settings"> | null | undefined;
   onRefresh?: () => void;
+  onSync?: () => void;
 }
 
 export function SalesView({
@@ -54,6 +55,7 @@ export function SalesView({
   onClearAll,
   settings,
   onRefresh,
+  onSync,
 }: SalesViewProps) {
   const [localSearch, setLocalSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -180,6 +182,16 @@ export function SalesView({
               className="h-8 text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
             >
               <Trash2 className="size-3.5" /> Clear All Invoices
+            </Button>
+          )}
+          {onSync && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSync}
+              className="h-8 text-xs gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+            >
+              <CloudUpload className="size-3.5" /> Sync to Firebase
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={onExport} className="h-8 text-xs gap-1.5">

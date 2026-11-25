@@ -39,12 +39,14 @@ import {
   type UserApproval,
   syncAllToFirebase,
   fbSyncCustomersToFirebase,
+  fbSyncSalesToFirebase,
   type FirebaseSyncResult,
 } from "@/integrations/firebase/firestore-service";
 
 export {
   syncAllToFirebase,
   fbSyncCustomersToFirebase,
+  fbSyncSalesToFirebase,
   fbDeleteSale,
   fbRegisterUserApproval,
   fbCheckUserApproval,

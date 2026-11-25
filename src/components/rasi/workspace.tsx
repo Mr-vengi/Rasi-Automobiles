@@ -25,7 +25,7 @@ import {
   loadPurchases, loadSales, loadSettings, loadSuppliers, receivePurchase,
   rasiKeys, saveBrand, saveCategory, saveCustomer, recordCustomerBill, saveExpense, saveProduct,
   saveSupplier, updateSettings, syncAllToFirebase, deleteOrArchiveRecord,
-  clearAllProducts, clearAllSales, fbDeleteSale, fbSyncCustomersToFirebase,
+  clearAllProducts, clearAllSales, fbDeleteSale, fbSyncCustomersToFirebase, fbSyncSalesToFirebase,
 } from "@/lib/rasi-data";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
@@ -727,24 +727,24 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
     setSaving(true);
     try {
       let billingCustomerId = customerId === "walk-in" ? null : customerId;
-      if (status === "completed") {
-        const mobile = customerDetails.phone.replace(/\D/g, "").slice(-10);
+      if (customerDetails.name?.trim()) {
+        const mobile = (customerDetails.phone || "").replace(/\D/g, "").slice(-10);
         const existingCustomer = customers.find(
-          (customer) => customer.phone.replace(/\D/g, "").slice(-10) === mobile
+          (customer) => (mobile && customer.phone.replace(/\D/g, "").slice(-10) === mobile)
         ) || customers.find((customer) => customer.id === billingCustomerId);
         const savedCustomer = await saveCustomer(
           {
             customer_name: customerDetails.name.trim(),
             phone: mobile,
             email: existingCustomer?.email || "",
-            gstin: customerDetails.gstin.trim(),
-            billing_address: customerDetails.address.trim(),
+            gstin: (customerDetails.gstin || "").trim(),
+            billing_address: (customerDetails.address || "").trim(),
             customer_type: existingCustomer?.customer_type || "retail",
             credit_limit: existingCustomer?.credit_limit || 0,
             state: existingCustomer?.state || "Tamil Nadu",
             notes: existingCustomer?.notes || "",
           },
-          existingCustomer?.id || billingCustomerId || undefined
+          existingCustomer?.id || (billingCustomerId && billingCustomerId !== "walk-in" ? billingCustomerId : undefined)
         );
         billingCustomerId = savedCustomer.id;
       }
@@ -1245,6 +1245,15 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
               onClearAll={handleClearAllSales}
               settings={settings}
               onRefresh={refreshAll}
+              onSync={async () => {
+                try {
+                  const count = await fbSyncSalesToFirebase();
+                  toast.success(`${count} invoice(s) synced to Firebase Cloud Firestore.`);
+                  refreshAll();
+                } catch {
+                  toast.error("Failed to sync invoices to Firebase.");
+                }
+              }}
             />
           )}
           {page === "purchases" && (
