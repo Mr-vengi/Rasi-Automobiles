@@ -313,6 +313,21 @@ export function SalesView({
                                 Pay
                               </Button>
                             )}
+                            {onDeleteSale && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Delete Invoice"
+                                className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => {
+                                  if (window.confirm(`Delete invoice ${sale.invoice_number || ""}?`)) {
+                                    onDeleteSale(sale.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            )}
                           </>
                         )}
                       </div>

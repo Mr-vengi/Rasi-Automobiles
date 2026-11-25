@@ -639,13 +639,31 @@ export async function fbDeleteSale(saleId: string): Promise<void> {
   const cleanId = String(saleId).trim();
   memCache.sales = memCache.sales.filter((s) => s.id !== cleanId && s.invoice_number !== cleanId);
   persist("sales", memCache.sales);
+
+  // Record tombstone in localStorage so deleted draft/sale never resurrects
   if (typeof window !== "undefined") {
-    void fetch(`/api/delete-sale?id=${encodeURIComponent(cleanId)}`, { method: "POST" }).catch(() => { });
-    void fetch(`/api/sales?id=${encodeURIComponent(cleanId)}`, { method: "DELETE" }).catch(() => { });
+    try {
+      const deletedList: string[] = JSON.parse(localStorage.getItem("rasi_deleted_sale_ids") || "[]");
+      if (!deletedList.includes(cleanId)) {
+        deletedList.push(cleanId);
+        localStorage.setItem("rasi_deleted_sale_ids", JSON.stringify(deletedList));
+      }
+    } catch { }
   }
-  void directFirestoreDelete("sales", cleanId);
+
+  if (typeof window !== "undefined") {
+    try {
+      await fetch(`/api/delete-sale?id=${encodeURIComponent(cleanId)}`, { method: "POST" }).catch(() => { });
+      await fetch(`/api/sales?id=${encodeURIComponent(cleanId)}`, { method: "DELETE" }).catch(() => { });
+    } catch { }
+  }
+
   try {
-    await withTimeout(deleteDoc(doc(db, "sales", cleanId)), 2500, null);
+    await directFirestoreDelete("sales", cleanId);
+  } catch { }
+
+  try {
+    await withTimeout(deleteDoc(doc(db, "sales", cleanId)), 3500, null);
   } catch (err) {
     console.warn("Firestore delete sale warning:", err);
   }
@@ -1050,10 +1068,18 @@ export async function fbAdjustInventory(
 
 export async function fbLoadSales(): Promise<any[]> {
   const salesMap = new Map<string, any>();
+  let deletedSet = new Set<string>();
+
+  if (typeof window !== "undefined") {
+    try {
+      const arr = JSON.parse(localStorage.getItem("rasi_deleted_sale_ids") || "[]");
+      if (Array.isArray(arr)) deletedSet = new Set(arr);
+    } catch { }
+  }
 
   // 1. Populate from in-memory / localStorage cache
   for (const s of memCache.sales) {
-    if (s?.id) salesMap.set(s.id, s);
+    if (s?.id && !deletedSet.has(s.id)) salesMap.set(s.id, s);
   }
 
   // 2. Fetch from backend /api/sales (persistent data/sales.json)
@@ -1064,7 +1090,7 @@ export async function fbLoadSales(): Promise<any[]> {
         const data = await res.json();
         if (Array.isArray(data?.sales)) {
           for (const s of data.sales) {
-            if (s?.id) salesMap.set(s.id, s);
+            if (s?.id && !deletedSet.has(s.id)) salesMap.set(s.id, s);
           }
         }
       }
@@ -1080,6 +1106,12 @@ export async function fbLoadSales(): Promise<any[]> {
     );
     if (snap && !snap.empty) {
       for (const d of snap.docs) {
+        if (deletedSet.has(d.id)) {
+          // Permanently cleanup tombstoned sale from Firestore if it still lingered
+          void directFirestoreDelete("sales", d.id);
+          void deleteDoc(doc(db, "sales", d.id)).catch(() => { });
+          continue;
+        }
         const s = { id: d.id, ...d.data() } as any;
         if (s.id) salesMap.set(s.id, s);
       }
@@ -1272,6 +1304,19 @@ export async function fbCreateSale(input: {
     updated_at: now,
   };
 
+  // Un-tombstone if saleId was in deleted list
+  if (typeof window !== "undefined") {
+    try {
+      const deletedList: string[] = JSON.parse(localStorage.getItem("rasi_deleted_sale_ids") || "[]");
+      if (deletedList.includes(saleId)) {
+        localStorage.setItem(
+          "rasi_deleted_sale_ids",
+          JSON.stringify(deletedList.filter((item) => item !== saleId))
+        );
+      }
+    } catch { }
+  }
+
   memCache.sales.unshift(saleRecord);
   persist("sales", memCache.sales);
 
@@ -1290,11 +1335,15 @@ export async function fbCreateSale(input: {
     } catch { }
   }
 
-  void withTimeout(
-    setDoc(doc(db, "sales", saleId), saleRecord),
-    2500,
-    null
-  ).catch((err) => console.warn("Firestore saveSale bg warning:", err));
+  try {
+    await withTimeout(
+      setDoc(doc(db, "sales", saleId), saleRecord, { merge: true }),
+      4000,
+      null
+    );
+  } catch (err) {
+    console.warn("Firestore saveSale notice:", err);
+  }
 
   return saleId;
 }
@@ -1330,13 +1379,26 @@ export async function fbRecordCustomerPayment(
         persist("customers", memCache.customers);
       }
     }
+    if (typeof window !== "undefined") {
+      try {
+        await fetch("/api/sales", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: saleId, sale, settings: memCache.settings }),
+        });
+      } catch { }
+    }
   }
 
-  void withTimeout(
-    setDoc(doc(db, "sales", saleId), sale, { merge: true }),
-    2500,
-    null
-  ).catch(() => { });
+  try {
+    await withTimeout(
+      setDoc(doc(db, "sales", saleId), sale, { merge: true }),
+      4000,
+      null
+    );
+  } catch (err) {
+    console.warn("Firestore record payment notice:", err);
+  }
 }
 
 export async function fbLoadPurchases(): Promise<any[]> {

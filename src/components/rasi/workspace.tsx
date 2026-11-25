@@ -451,6 +451,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
 
   const handleDeleteSale = async (saleId: string) => {
     try {
+      queryClient.setQueryData(rasiKeys.sales, (old: any) => (old || []).filter((s: any) => s.id !== saleId));
       await fbDeleteSale(saleId);
       if (resumeSaleId === saleId) {
         setCart([]);
@@ -469,7 +470,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
       if (selectedSale === saleId) {
         setSelectedSale(null);
       }
-      toast.success("Draft invoice deleted successfully.");
+      toast.success("Invoice deleted successfully.");
     } catch (err) {
       toast.error(readError(err));
     }
