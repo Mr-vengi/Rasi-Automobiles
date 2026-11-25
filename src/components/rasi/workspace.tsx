@@ -399,20 +399,6 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
           }
         }
       } catch { }
-
-      // Clean slate migration: remove old sample products ("1", "2", "3", "4", "prod-1", etc.) and sample sales
-      try {
-        const WIPE_KEY = "rasi_wipe_all_demo_data_v1";
-        if (!localStorage.getItem(WIPE_KEY)) {
-          localStorage.setItem("rasi_products", "[]");
-          localStorage.setItem("rasi_sales", "[]");
-          localStorage.setItem("rasi_movements", "[]");
-          localStorage.setItem("rasi_purchases", "[]");
-          localStorage.setItem(WIPE_KEY, "true");
-          void fetch("/api/clear-all", { method: "POST" }).catch(() => { });
-          void queryClient.invalidateQueries({ queryKey: rasiKeys.all });
-        }
-      } catch { }
     }
   }, [queryClient]);
 
@@ -804,6 +790,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
       }
       setResumeSaleId(null);
       await queryClient.refetchQueries({ queryKey: rasiKeys.sales });
+      await queryClient.refetchQueries({ queryKey: rasiKeys.customers });
       await queryClient.invalidateQueries({ queryKey: rasiKeys.all });
       if (status === "completed") {
         changePage("sales", true);

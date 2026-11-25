@@ -650,21 +650,48 @@ export async function fbDeleteSale(saleId: string): Promise<void> {
 }
 
 export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
+  const customerMap = new Map<string, Tables<"customers">>();
+
+  // 1. Populate from in-memory / localStorage cache
+  for (const c of memCache.customers) {
+    if (c?.id && !c.archived_at) customerMap.set(c.id, c);
+  }
+
+  // 2. Fetch from backend /api/customers (persistent data/customers.json)
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/customers");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.customers)) {
+          for (const c of data.customers) {
+            if (c?.id && !c.archived_at) customerMap.set(c.id, c);
+          }
+        }
+      }
+    } catch { }
+  }
+
+  // 3. Merge from Cloud Firestore
   try {
     const snap = await withTimeout(getDocs(collection(db, "customers")), 3500, null);
-    if (snap) {
-      const custs = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }) as Tables<"customers">)
-        .filter((c) => !c.archived_at);
-      custs.sort((a, b) => (a.customer_name || "").localeCompare(b.customer_name || ""));
-      memCache.customers = custs;
-      persist("customers", memCache.customers);
-      return [...memCache.customers];
+    if (snap && !snap.empty) {
+      for (const d of snap.docs) {
+        const data = { id: d.id, ...d.data() } as Tables<"customers">;
+        if (data.id && !data.archived_at) {
+          customerMap.set(data.id, data);
+        }
+      }
     }
   } catch (e) {
     console.warn("Firestore getDocs customers notice:", e);
   }
-  return [...memCache.customers];
+
+  const list = Array.from(customerMap.values());
+  list.sort((a, b) => (a.customer_name || "").localeCompare(b.customer_name || ""));
+  memCache.customers = list;
+  persist("customers", memCache.customers);
+  return list;
 }
 
 export async function fbSaveCustomer(
@@ -704,11 +731,13 @@ export async function fbSaveCustomer(
   persist("customers", memCache.customers);
 
   if (typeof window !== "undefined") {
-    void fetch("/api/customers", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    }).catch(() => { });
+    try {
+      await fetch("/api/customers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch { }
   }
 
   void withTimeout(
@@ -965,7 +994,29 @@ export async function fbAdjustInventory(
 }
 
 export async function fbLoadSales(): Promise<any[]> {
-  // 1. Primary: Cloud Firestore
+  const salesMap = new Map<string, any>();
+
+  // 1. Populate from in-memory / localStorage cache
+  for (const s of memCache.sales) {
+    if (s?.id) salesMap.set(s.id, s);
+  }
+
+  // 2. Fetch from backend /api/sales (persistent data/sales.json)
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/sales");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.sales)) {
+          for (const s of data.sales) {
+            if (s?.id) salesMap.set(s.id, s);
+          }
+        }
+      }
+    } catch { }
+  }
+
+  // 3. Merge from Cloud Firestore
   try {
     const snap = await withTimeout(
       getDocs(collection(db, "sales")),
@@ -973,36 +1024,20 @@ export async function fbLoadSales(): Promise<any[]> {
       null
     );
     if (snap && !snap.empty) {
-      const sales = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
-      sales.sort((a, b) => new Date(b.created_at || b.sale_date || 0).getTime() - new Date(a.created_at || a.sale_date || 0).getTime());
-      memCache.sales = sales;
-      persist("sales", memCache.sales);
-      return sales;
+      for (const d of snap.docs) {
+        const s = { id: d.id, ...d.data() } as any;
+        if (s.id) salesMap.set(s.id, s);
+      }
     }
   } catch (err) {
     console.warn("fbLoadSales Firestore notice:", err);
   }
 
-  // 2. Secondary fallback: local cache
-  if (memCache.sales.length > 0) {
-    return memCache.sales;
-  }
-
-  // 3. Fallback to /api/sales only if non-empty
-  if (typeof window !== "undefined") {
-    try {
-      const res = await fetch("/api/sales");
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data?.sales) && data.sales.length > 0) {
-          memCache.sales = data.sales;
-          persist("sales", memCache.sales);
-          return memCache.sales;
-        }
-      }
-    } catch { }
-  }
-  return memCache.sales;
+  const sales = Array.from(salesMap.values());
+  sales.sort((a, b) => new Date(b.created_at || b.sale_date || 0).getTime() - new Date(a.created_at || a.sale_date || 0).getTime());
+  memCache.sales = sales;
+  persist("sales", memCache.sales);
+  return sales;
 }
 
 export async function fbCreateSale(input: {
@@ -1186,16 +1221,18 @@ export async function fbCreateSale(input: {
   persist("sales", memCache.sales);
 
   if (typeof window !== "undefined") {
-    void fetch("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: saleId, sale: saleRecord, settings: memCache.settings }),
-    }).catch(() => { });
-    void fetch("/api/invoice-cache", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: saleId, sale: saleRecord, settings: memCache.settings }),
-    }).catch(() => { });
+    try {
+      await fetch("/api/sales", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: saleId, sale: saleRecord, settings: memCache.settings }),
+      });
+      void fetch("/api/invoice-cache", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: saleId, sale: saleRecord, settings: memCache.settings }),
+      }).catch(() => { });
+    } catch { }
   }
 
   void withTimeout(
