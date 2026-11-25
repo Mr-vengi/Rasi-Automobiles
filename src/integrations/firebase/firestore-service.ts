@@ -333,10 +333,12 @@ export async function syncAllToFirebase(): Promise<FirebaseSyncResult> {
       count++;
     }
 
-    // 5. Customers
-    for (const cust of memCache.customers) {
-      await setDoc(doc(db, "customers", cust.id), cust, { merge: true });
-      count++;
+    // 5. Customers (only sync if user has explicit local customer state, never re-seed deleted defaults)
+    if (typeof window === "undefined" || localStorage.getItem("rasi_customers") !== null) {
+      for (const cust of memCache.customers) {
+        await setDoc(doc(db, "customers", cust.id), cust, { merge: true });
+        count++;
+      }
     }
 
     // 6. Products
@@ -664,7 +666,7 @@ export async function fbDeleteSale(saleId: string): Promise<void> {
 export async function fbLoadCustomers(): Promise<Tables<"customers">[]> {
   try {
     const snap = await withTimeout(getDocs(collection(db, "customers")), 3500, null);
-    if (snap && !snap.empty) {
+    if (snap) {
       const custs = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }) as Tables<"customers">)
         .filter((c) => !c.archived_at);
