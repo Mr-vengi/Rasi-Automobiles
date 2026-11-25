@@ -835,7 +835,9 @@ export async function fbArchiveRecord(
     persist("customers", memCache.customers);
     try {
       await withTimeout(deleteDoc(doc(db, "customers", id)), 3000, null);
-    } catch { }
+    } catch (e) {
+      console.warn("Firestore deleteDoc customer error:", e);
+    }
     return;
   } else if (table === "suppliers") {
     memCache.suppliers = memCache.suppliers.filter((s) => s.id !== id);
