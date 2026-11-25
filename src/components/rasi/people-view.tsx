@@ -14,6 +14,7 @@ type Supplier = Tables<"suppliers">;
 interface PeopleViewProps {
   kind: "customer" | "supplier";
   items: (Customer | Supplier)[];
+  billCounts?: ReadonlyMap<string, number>;
   search: string;
   loading: boolean;
   has: (permission: string) => boolean;
@@ -27,6 +28,7 @@ interface PeopleViewProps {
 export function PeopleView({
   kind,
   items,
+  billCounts,
   search: externalSearch,
   loading,
   has,
@@ -151,7 +153,9 @@ export function PeopleView({
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center font-mono font-semibold">
-                          {Number((item as Customer & { bill_count?: number }).bill_count || 0)}
+                          {billCounts
+                            ? billCounts.get(item.id) ?? 0
+                            : Number((item as Customer & { bill_count?: number }).bill_count || 0)}
                         </TableCell>
                         <TableCell className="text-right font-mono font-bold text-foreground">
                           ₹{Number((item as Customer).credit_limit || 0).toLocaleString("en-IN")}

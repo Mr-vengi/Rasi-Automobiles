@@ -10,7 +10,6 @@ import {
   where,
   orderBy,
   runTransaction,
-  increment,
 } from "firebase/firestore";
 import { db, firebaseConfig, auth } from "./client";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -887,31 +886,6 @@ export async function fbSaveCustomer(
   }
 
   return payload;
-}
-
-export async function fbRecordCustomerBill(customerId: string): Promise<void> {
-  const now = new Date().toISOString();
-  const customerIndex = memCache.customers.findIndex((customer) => customer.id === customerId);
-
-  if (customerIndex >= 0) {
-    const customer = memCache.customers[customerIndex] as Tables<"customers"> & { bill_count?: number };
-    memCache.customers[customerIndex] = {
-      ...customer,
-      bill_count: Number(customer.bill_count || 0) + 1,
-      updated_at: now,
-    } as Tables<"customers">;
-    persist("customers", memCache.customers);
-  }
-
-  void withTimeout(
-    setDoc(
-      doc(db, "customers", customerId),
-      { bill_count: increment(1), updated_at: now },
-      { merge: true }
-    ),
-    2500,
-    null
-  ).catch((err) => console.warn("Firestore customer bill count warning:", err));
 }
 
 export async function fbLoadSuppliers(): Promise<Tables<"suppliers">[]> {

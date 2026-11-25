@@ -23,7 +23,7 @@ import {
   RASI_BUSINESS_ID, adjustInventory, createSale, loadBrands, loadCategories,
   loadCustomers, loadEmployees, loadExpenses, loadMovements, loadProducts,
   loadPurchases, loadSales, loadSettings, loadSuppliers, receivePurchase,
-  rasiKeys, saveBrand, saveCategory, saveCustomer, recordCustomerBill, saveExpense, saveProduct,
+  rasiKeys, saveBrand, saveCategory, saveCustomer, saveExpense, saveProduct,
   saveSupplier, updateSettings, syncAllToFirebase, deleteOrArchiveRecord,
   clearAllProducts, clearAllSales, fbDeleteSale, fbSyncCustomersToFirebase, fbSyncSalesToFirebase,
 } from "@/lib/rasi-data";
@@ -282,7 +282,12 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   const brandsQuery = useQuery({ queryKey: rasiKeys.brands, queryFn: loadBrands, enabled: has("products:read") });
   const customersQuery = useQuery({ queryKey: rasiKeys.customers, queryFn: loadCustomers, enabled: has("customers:read") });
   const suppliersQuery = useQuery({ queryKey: rasiKeys.suppliers, queryFn: loadSuppliers, enabled: has("suppliers:read") });
-  const salesQuery = useQuery({ queryKey: rasiKeys.sales, queryFn: loadSales, enabled: has("sales:read") });
+  const salesQuery = useQuery({
+    queryKey: rasiKeys.sales,
+    queryFn: loadSales,
+    enabled: has("sales:read"),
+    refetchInterval: page === "customers" ? 5000 : false,
+  });
   const purchasesQuery = useQuery({ queryKey: rasiKeys.purchases, queryFn: loadPurchases, enabled: has("purchases:read") });
   const movementsQuery = useQuery({ queryKey: rasiKeys.movements, queryFn: () => loadMovements(), enabled: has("inventory:read") });
   const expensesQuery = useQuery({ queryKey: rasiKeys.expenses, queryFn: loadExpenses, enabled: has("expenses:read") });
@@ -295,6 +300,14 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   const customers = customersQuery.data ?? [];
   const suppliers = suppliersQuery.data ?? [];
   const sales = salesQuery.data ?? [];
+  const customerBillCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const sale of sales) {
+      if (sale.status !== "completed" || !sale.customer_id) continue;
+      counts.set(sale.customer_id, (counts.get(sale.customer_id) || 0) + 1);
+    }
+    return counts;
+  }, [sales]);
   const purchases = purchasesQuery.data ?? [];
   const movements = movementsQuery.data ?? [];
   const expenses = expensesQuery.data ?? [];
@@ -768,9 +781,6 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         tenderedAmount: tenderedTotal,
         changeReturned: changeReturn,
       });
-      if (status === "completed" && billingCustomerId) {
-        await recordCustomerBill(billingCustomerId);
-      }
       toast.success(
         status === "draft"
           ? "Bill saved as a draft."
@@ -1276,6 +1286,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
             <PeopleView
               kind="customer"
               items={customers}
+              billCounts={customerBillCounts}
               search={searchText}
               loading={customersQuery.isPending}
               has={has}
