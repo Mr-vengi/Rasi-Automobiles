@@ -683,9 +683,7 @@ export function InvoicePrinter({
                     <li>Delivery and other applicable charges will be charged extra as applicable.</li>
                   </ol>
                   <div className="pt-1 text-[9px] border-t border-black/20 mt-1 font-mono text-slate-900">
-                    <p><strong>Bank:</strong> State Bank of India</p>
-                    <p><strong>A/C No:</strong> 39201948201</p>
-                    <p><strong>IFSC:</strong> SBIN0001244</p>
+                    <p><strong>GPAY NUMBER :</strong> 6382551430</p>
                   </div>
                 </div>
 
