@@ -581,3 +581,7 @@ export async function clearAllProducts(): Promise<void> {
 export async function clearAllSales(): Promise<void> {
   return fbClearAllSales();
 }
+
+export async function deleteSale(saleId: string): Promise<void> {
+  return fbDeleteSale(saleId);
+}

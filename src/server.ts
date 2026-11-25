@@ -179,6 +179,49 @@ export default {
       });
     }
 
+    // API to delete a single sale/draft from backend
+    if (
+      (url.pathname === "/api/sales" && request.method === "DELETE") ||
+      (url.pathname === "/api/delete-sale" && (request.method === "POST" || request.method === "DELETE"))
+    ) {
+      try {
+        let id = url.searchParams.get("id");
+        if (!id) {
+          const body = (await request.json().catch(() => ({}))) as any;
+          id = body?.id || body?.saleId;
+        }
+        if (id) {
+          const cleanId = String(id).trim();
+          serverInvoiceStore.delete(cleanId);
+          serverInvoiceStore.delete(cleanId.toLowerCase());
+          serverInvoiceStore.delete(cleanId.toUpperCase());
+          for (const [key, s] of Array.from(serverInvoiceStore.entries())) {
+            if (s.id === cleanId || s.invoice_number === cleanId) {
+              serverInvoiceStore.delete(key);
+            }
+          }
+          if (latestInvoiceCache && (latestInvoiceCache.id === cleanId || latestInvoiceCache.invoice_number === cleanId)) {
+            latestInvoiceCache = serverInvoiceStore.size > 0 ? Array.from(serverInvoiceStore.values())[0] : null;
+          }
+          persistSalesToFile(serverInvoiceStore);
+        }
+        return new Response(JSON.stringify({ ok: true, id, remaining: serverInvoiceStore.size }), {
+          headers: {
+            "content-type": "application/json",
+            "access-control-allow-origin": "*",
+          },
+        });
+      } catch {
+        return new Response(JSON.stringify({ ok: false }), {
+          status: 400,
+          headers: {
+            "content-type": "application/json",
+            "access-control-allow-origin": "*",
+          },
+        });
+      }
+    }
+
     // API to clear all sales
     if ((url.pathname === "/api/clear-sales" || url.pathname === "/api/clear-all") && request.method === "POST") {
       serverInvoiceStore.clear();

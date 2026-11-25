@@ -445,6 +445,12 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   }
 
   function clearActiveCart() {
+    if (resumeSaleId) {
+      const draftId = resumeSaleId;
+      void fbDeleteSale(draftId).then(() => {
+        void queryClient.invalidateQueries({ queryKey: rasiKeys.sales });
+      }).catch(() => {});
+    }
     setCart([]);
     setPayment(initialPayment());
     setCustomerId("walk-in");
@@ -456,6 +462,32 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
       try { sessionStorage.removeItem("rasi_active_cart"); } catch {}
     }
   }
+
+  const handleDeleteSale = async (saleId: string) => {
+    try {
+      await fbDeleteSale(saleId);
+      if (resumeSaleId === saleId) {
+        setCart([]);
+        setPayment(initialPayment());
+        setCustomerId("walk-in");
+        setCustomerDetails({ name: "", phone: "", gstin: "", address: "" });
+        setExtraCharge({ enabled: false, label: "Auto Charge", amount: 0 });
+        setInterstate(false);
+        setResumeSaleId(null);
+        if (typeof window !== "undefined") {
+          try { sessionStorage.removeItem("rasi_active_cart"); } catch {}
+        }
+      }
+      await queryClient.refetchQueries({ queryKey: rasiKeys.sales });
+      await queryClient.invalidateQueries({ queryKey: rasiKeys.all });
+      if (selectedSale === saleId) {
+        setSelectedSale(null);
+      }
+      toast.success("Draft invoice deleted successfully.");
+    } catch (err) {
+      toast.error(readError(err));
+    }
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1219,6 +1251,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
                 if (!val) setAutoPrintSaleId(null);
               }}
               onResume={(sale) => void resumeDraft(sale as Sale)}
+              onDeleteSale={(saleId) => void handleDeleteSale(saleId)}
               onNewSale={() => changePage("pos")}
               onExport={() => exportToCsv("rasi-sales", visibleSales)}
               onClearAll={handleClearAllSales}

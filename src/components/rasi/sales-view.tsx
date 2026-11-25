@@ -30,6 +30,7 @@ interface SalesViewProps {
   has: (permission: string) => boolean;
   onSelect: (saleId: string | null) => void;
   onResume: (sale: Sale) => void;
+  onDeleteSale?: (saleId: string) => void;
   onNewSale: () => void;
   onExport: () => void;
   onClearAll?: () => void;
@@ -47,6 +48,7 @@ export function SalesView({
   has,
   onSelect,
   onResume,
+  onDeleteSale,
   onNewSale,
   onExport,
   onClearAll,
@@ -252,14 +254,31 @@ export function SalesView({
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         {isDraft ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs gap-1"
-                            onClick={() => onResume(sale)}
-                          >
-                            <Play className="size-3 text-primary" /> Resume
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => onResume(sale)}
+                            >
+                              <Play className="size-3 text-primary" /> Resume
+                            </Button>
+                            {onDeleteSale && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Delete Draft Invoice"
+                                className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => {
+                                  if (window.confirm(`Delete draft invoice ${sale.invoice_number || ""}?`)) {
+                                    onDeleteSale(sale.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            )}
+                          </div>
                         ) : (
                           <>
                             <Button

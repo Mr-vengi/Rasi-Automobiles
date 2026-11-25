@@ -621,10 +621,15 @@ export async function fbClearAllSales(): Promise<void> {
 }
 
 export async function fbDeleteSale(saleId: string): Promise<void> {
-  memCache.sales = memCache.sales.filter((s) => s.id !== saleId);
+  const cleanId = String(saleId).trim();
+  memCache.sales = memCache.sales.filter((s) => s.id !== cleanId && s.invoice_number !== cleanId);
   persist("sales", memCache.sales);
+  if (typeof window !== "undefined") {
+    void fetch(`/api/delete-sale?id=${encodeURIComponent(cleanId)}`, { method: "POST" }).catch(() => { });
+    void fetch(`/api/sales?id=${encodeURIComponent(cleanId)}`, { method: "DELETE" }).catch(() => { });
+  }
   try {
-    await withTimeout(deleteDoc(doc(db, "sales", saleId)), 2500, null);
+    await withTimeout(deleteDoc(doc(db, "sales", cleanId)), 2500, null);
   } catch (err) {
     console.warn("Firestore delete sale warning:", err);
   }
