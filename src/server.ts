@@ -58,6 +58,7 @@ try {
 const DATA_DIR = pathModule ? pathModule.join(process.cwd(), "data") : "";
 const SALES_FILE = pathModule ? pathModule.join(DATA_DIR, "sales.json") : "";
 const PRODUCTS_FILE = pathModule ? pathModule.join(DATA_DIR, "products.json") : "";
+const CUSTOMERS_FILE = pathModule ? pathModule.join(DATA_DIR, "customers.json") : "";
 
 function ensureDataDir() {
   if (fsModule && DATA_DIR && !fsModule.existsSync(DATA_DIR)) {
@@ -120,8 +121,35 @@ function persistProductsToFile(store: Map<string, any>) {
   }
 }
 
+function loadPersistedCustomers(): Map<string, any> {
+  const store = new Map<string, any>();
+  if (fsModule && CUSTOMERS_FILE && fsModule.existsSync(CUSTOMERS_FILE)) {
+    try {
+      const content = fsModule.readFileSync(CUSTOMERS_FILE, "utf-8");
+      const list = JSON.parse(content);
+      if (Array.isArray(list)) {
+        for (const item of list) {
+          if (item?.id) store.set(String(item.id), item);
+        }
+      }
+    } catch { }
+  }
+  return store;
+}
+
+function persistCustomersToFile(store: Map<string, any>) {
+  if (fsModule && CUSTOMERS_FILE) {
+    try {
+      ensureDataDir();
+      const uniqueCustomers = Array.from(new Set(store.values()));
+      fsModule.writeFileSync(CUSTOMERS_FILE, JSON.stringify(uniqueCustomers, null, 2), "utf-8");
+    } catch { }
+  }
+}
+
 const serverInvoiceStore = loadPersistedSales();
 const serverProductStore = loadPersistedProducts();
+const serverCustomerStore = loadPersistedCustomers();
 let latestInvoiceCache: any = serverInvoiceStore.size > 0 ? Array.from(serverInvoiceStore.values())[0] : null;
 let cachedBusinessSettings: any = null;
 
@@ -309,6 +337,87 @@ export default {
           persistProductsToFile(serverProductStore);
         }
         return new Response(JSON.stringify({ ok: true, id, remaining: serverProductStore.size }), {
+          headers: {
+            "content-type": "application/json",
+            "access-control-allow-origin": "*",
+          },
+        });
+      } catch {
+        return new Response(JSON.stringify({ ok: false }), {
+          status: 400,
+          headers: {
+            "content-type": "application/json",
+            "access-control-allow-origin": "*",
+          },
+        });
+      }
+    }
+
+    // API to get all customers from backend
+    if (url.pathname === "/api/customers" && request.method === "GET") {
+      const customers = Array.from(new Set(serverCustomerStore.values()));
+      return new Response(JSON.stringify({ ok: true, customers }), {
+        headers: {
+          "content-type": "application/json",
+          "access-control-allow-origin": "*",
+          "cache-control": "no-store",
+        },
+      });
+    }
+
+    // API to save customers to backend
+    if (url.pathname === "/api/customers" && request.method === "POST") {
+      try {
+        const body = (await request.json()) as any;
+        if (body?.customers && Array.isArray(body.customers)) {
+          for (const c of body.customers) {
+            if (c?.id) serverCustomerStore.set(String(c.id), c);
+          }
+        } else if (body?.customer?.id) {
+          serverCustomerStore.set(String(body.customer.id), body.customer);
+        } else if (body?.id) {
+          serverCustomerStore.set(String(body.id), body);
+        }
+        persistCustomersToFile(serverCustomerStore);
+        return new Response(JSON.stringify({ ok: true, count: serverCustomerStore.size }), {
+          headers: {
+            "content-type": "application/json",
+            "access-control-allow-origin": "*",
+          },
+        });
+      } catch {
+        return new Response(JSON.stringify({ ok: false }), {
+          status: 400,
+          headers: {
+            "content-type": "application/json",
+            "access-control-allow-origin": "*",
+          },
+        });
+      }
+    }
+
+    // API to delete a single customer from backend AND Firestore
+    if (
+      (url.pathname === "/api/customers" && request.method === "DELETE") ||
+      (url.pathname === "/api/delete-customer" && (request.method === "POST" || request.method === "DELETE"))
+    ) {
+      try {
+        let id = url.searchParams.get("id");
+        if (!id) {
+          const body = (await request.json().catch(() => ({}))) as any;
+          id = body?.id || body?.customerId;
+        }
+        if (id) {
+          const cleanId = String(id).trim();
+          serverCustomerStore.delete(cleanId);
+          persistCustomersToFile(serverCustomerStore);
+          // Also invoke direct HTTPS REST delete to Firestore server from backend
+          try {
+            const firestoreUrl = `https://firestore.googleapis.com/v1/projects/rasiautomobile/databases/(default)/documents/customers/${encodeURIComponent(cleanId)}?key=AIzaSyAmJi6G8K1qAlKYKXZK3yhPSsrqnH3jTF4`;
+            void fetch(firestoreUrl, { method: "DELETE" }).catch(() => {});
+          } catch { }
+        }
+        return new Response(JSON.stringify({ ok: true, id, remaining: serverCustomerStore.size }), {
           headers: {
             "content-type": "application/json",
             "access-control-allow-origin": "*",

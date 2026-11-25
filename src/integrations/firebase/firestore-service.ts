@@ -12,7 +12,7 @@ import {
   runTransaction,
   increment,
 } from "firebase/firestore";
-import { db } from "./client";
+import { db, firebaseConfig } from "./client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 // Inline to avoid circular-import TDZ during SSR module evaluation
 const RASI_BUSINESS_ID = "00000000-0000-4000-8000-000000000001";
@@ -109,6 +109,19 @@ function withTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promise<T>
     promise,
     new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
   ]);
+}
+
+// Helper: direct HTTPS REST delete to Firestore server (bypasses WebChannel/gRPC stream)
+export async function directFirestoreDelete(collectionName: string, docId: string): Promise<boolean> {
+  if (typeof window === "undefined" && typeof fetch === "undefined") return false;
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/${collectionName}/${encodeURIComponent(docId)}?key=${firebaseConfig.apiKey}`;
+    const res = await fetch(url, { method: "DELETE" });
+    return res.ok || res.status === 404;
+  } catch (err) {
+    console.warn(`directFirestoreDelete notice for ${collectionName}/${docId}:`, err);
+    return false;
+  }
 }
 
 // In-memory + LocalStorage cache for instant UI response and resilient offline operation
@@ -628,6 +641,7 @@ export async function fbDeleteSale(saleId: string): Promise<void> {
     void fetch(`/api/delete-sale?id=${encodeURIComponent(cleanId)}`, { method: "POST" }).catch(() => { });
     void fetch(`/api/sales?id=${encodeURIComponent(cleanId)}`, { method: "DELETE" }).catch(() => { });
   }
+  void directFirestoreDelete("sales", cleanId);
   try {
     await withTimeout(deleteDoc(doc(db, "sales", cleanId)), 2500, null);
   } catch (err) {
@@ -688,6 +702,14 @@ export async function fbSaveCustomer(
     memCache.customers.unshift(payload);
   }
   persist("customers", memCache.customers);
+
+  if (typeof window !== "undefined") {
+    void fetch("/api/customers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => { });
+  }
 
   void withTimeout(
     setDoc(doc(db, "customers", targetId), payload, { merge: true }),
@@ -798,6 +820,7 @@ export async function fbArchiveRecord(
         body: JSON.stringify({ id }),
       }).catch(() => { });
     }
+    void directFirestoreDelete("products", id);
     try {
       await withTimeout(deleteDoc(doc(db, "products", id)), 3000, null);
     } catch (e) {
@@ -807,8 +830,18 @@ export async function fbArchiveRecord(
   } else if (table === "customers") {
     memCache.customers = memCache.customers.filter((c) => c.id !== id);
     persist("customers", memCache.customers);
+    if (typeof window !== "undefined") {
+      void fetch(`/api/customers?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => { });
+      void fetch("/api/delete-customer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      }).catch(() => { });
+    }
+    // Direct HTTPS REST delete executes synchronously on Firestore server
+    void directFirestoreDelete("customers", id);
     try {
-      await withTimeout(deleteDoc(doc(db, "customers", id)), 10000, null);
+      void deleteDoc(doc(db, "customers", id)).catch(() => { });
     } catch (e) {
       console.warn("Firestore deleteDoc customer error:", e);
     }
@@ -816,6 +849,7 @@ export async function fbArchiveRecord(
   } else if (table === "suppliers") {
     memCache.suppliers = memCache.suppliers.filter((s) => s.id !== id);
     persist("suppliers", memCache.suppliers);
+    void directFirestoreDelete("suppliers", id);
     try {
       await withTimeout(deleteDoc(doc(db, "suppliers", id)), 3000, null);
     } catch { }

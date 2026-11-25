@@ -383,14 +383,23 @@ export async function deleteOrArchiveRecord(
     console.warn("fbArchiveRecord error:", err);
   }
 
-  if (typeof window !== "undefined" && table === "products") {
+  if (typeof window !== "undefined") {
     try {
-      void fetch(`/api/products?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => { });
-      void fetch("/api/delete-product", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id }),
-      }).catch(() => { });
+      if (table === "products") {
+        void fetch(`/api/products?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => { });
+        void fetch("/api/delete-product", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id }),
+        }).catch(() => { });
+      } else if (table === "customers") {
+        void fetch(`/api/customers?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => { });
+        void fetch("/api/delete-customer", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id }),
+        }).catch(() => { });
+      }
     } catch { }
   }
 
