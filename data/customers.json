@@ -100,5 +100,39 @@
     "updated_at": "2026-11-25T03:46:31.640Z",
     "archived_at": null,
     "bill_count": 0
+  },
+  {
+    "id": "cust-1795580716908",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "customer_name": "j",
+    "phone": "1234567890",
+    "email": "",
+    "billing_address": "kallai",
+    "gstin": "",
+    "customer_type": "retail",
+    "credit_limit": 0,
+    "state": "Tamil Nadu",
+    "notes": "",
+    "created_at": "2026-11-25T04:25:16.908Z",
+    "updated_at": "2026-11-25T04:29:35.725Z",
+    "archived_at": null,
+    "bill_count": 0
+  },
+  {
+    "id": "cust-1795580795095",
+    "business_id": "00000000-0000-4000-8000-000000000001",
+    "customer_name": "j",
+    "phone": "9098213425",
+    "email": "",
+    "billing_address": "k",
+    "gstin": "",
+    "customer_type": "retail",
+    "credit_limit": 0,
+    "state": "Tamil Nadu",
+    "notes": "",
+    "created_at": "2026-11-25T04:26:35.095Z",
+    "updated_at": "2026-11-25T04:26:35.095Z",
+    "archived_at": null,
+    "bill_count": 0
   }
 ]

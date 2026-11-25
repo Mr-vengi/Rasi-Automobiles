@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { supabase } from "@/integrations/supabase/client";
 import { auth } from "@/integrations/firebase/client";
 import { RasiAppContext } from "@/components/rasi/app-context";
-import { calculateInvoiceTotals, getStockStatus } from "@/lib/rasi-calculations";
+import { calculateInvoiceTotals, getStockStatus, safeUUID } from "@/lib/rasi-calculations";
 import {
   RASI_BUSINESS_ID, adjustInventory, createSale, loadBrands, loadCategories,
   loadCustomers, loadEmployees, loadExpenses, loadMovements, loadProducts,
@@ -764,7 +764,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
         extraCharge: extraCharge.enabled && extraCharge.amount > 0 ? { label: extraCharge.label || "Auto Charge", amount: Number(extraCharge.amount) } : null,
         interstate,
         status,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: safeUUID(),
         tenderedAmount: tenderedTotal,
         changeReturned: changeReturn,
       });

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { parseCsv, downloadSampleProductCsv } from "./csv-utils";
+import { safeUUID } from "@/lib/rasi-calculations";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
 type Product = Tables<"products">;
@@ -804,7 +805,7 @@ export function PurchaseForm({ products, suppliers, saving, onSubmit }: Purchase
         Number(paidNow) > 0
           ? [{ payment_method: paymentMethod, amount: Number(paidNow), reference_number: "" }]
           : [],
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: safeUUID(),
     });
   };
 
