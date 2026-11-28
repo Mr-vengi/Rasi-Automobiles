@@ -227,7 +227,14 @@ function AuthPage() {
 
       // 2. SIGN UP (CREATE ACCOUNT) MODE
       if (mode === "signup") {
-        const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
+        const isAdmin =
+          cleanEmail === "ranjithselvaraj14@gmail.com" ||
+          cleanEmail === "admin" ||
+          cleanEmail === "admin@rasi.com" ||
+          cleanEmail.startsWith("admin@");
+        if (isAdmin && password !== "Admin@123") {
+          throw new Error("Administrator password must be Admin@123.");
+        }
         let userUid: string;
 
         try {
@@ -300,47 +307,48 @@ function AuthPage() {
       }
 
       // 3. SIGN IN MODE
-      const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
+      const isAdmin =
+        cleanEmail === "ranjithselvaraj14@gmail.com" ||
+        cleanEmail === "admin" ||
+        cleanEmail === "admin@rasi.com" ||
+        cleanEmail.startsWith("admin@");
 
       if (isAdmin) {
-        // ADMIN LOGIN
+        // ADMIN LOGIN: STRICTLY enforce Admin@123 password
+        if (password !== "Admin@123") {
+          throw new Error("Incorrect password for Administrator. The password is Admin@123.");
+        }
+
+        const adminEmail = "ranjithselvaraj14@gmail.com";
         let adminUid = "admin-ranjith-01";
-        const isTempAdminPass = password === "admin123";
 
         try {
-          const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+          const cred = await signInWithEmailAndPassword(auth, adminEmail, "Admin@123");
           adminUid = cred.user.uid;
         } catch (fbErr: any) {
-          if (isTempAdminPass) {
-            // Always allow admin123! Try to create in Firebase Auth if missing
+          const fallback = await fbAuthenticateFallback(adminEmail, "Admin@123");
+          if (!fallback.success) {
+            throw new Error(fallback.error || "Incorrect password for Administrator. The password is Admin@123.");
+          }
+
+          if (
+            fbErr?.code === "auth/user-not-found" ||
+            fbErr?.code === "auth/invalid-credential" ||
+            fbErr?.code === "auth/wrong-password"
+          ) {
             try {
-              const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+              const cred = await createUserWithEmailAndPassword(auth, adminEmail, "Admin@123");
               adminUid = cred.user.uid;
               await updateProfile(cred.user, { displayName: "RANJITH SELVARAJ" });
             } catch { }
           } else {
-            if (fbErr.code === "auth/user-not-found") {
-              try {
-                const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-                adminUid = cred.user.uid;
-                await updateProfile(cred.user, { displayName: "RANJITH SELVARAJ" });
-              } catch { }
-            } else if (fbErr.code === "auth/wrong-password") {
-              throw new Error("Incorrect password for Administrator. (Temporary default password: admin123)");
-            } else {
-              // Configuration not found or cloud registry fallback
-              const fallback = await fbAuthenticateFallback(cleanEmail, password);
-              if (!fallback.success) {
-                throw new Error(fallback.error || "Incorrect password for Administrator. (Temporary default password: admin123)");
-              }
-              adminUid = fallback.user?.uid || adminUid;
-            }
+            adminUid = fallback.user?.uid || adminUid;
           }
         }
 
         const adminStaff = {
           userId: adminUid,
-          email: "ranjithselvaraj14@gmail.com",
+          email: adminEmail,
           fullName: "RANJITH SELVARAJ",
           roleId: "administrator",
           permissions: FULL_ADMIN_PERMISSIONS,

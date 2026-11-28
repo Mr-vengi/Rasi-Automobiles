@@ -120,7 +120,7 @@ export async function ensureFirebaseAuth(): Promise<boolean> {
       await withTimeout(auth.authStateReady(), 2000, null);
       if (auth.currentUser) return true;
     }
-    await signInWithEmailAndPassword(auth, "ranjithselvaraj14@gmail.com", "admin123");
+    await signInWithEmailAndPassword(auth, "ranjithselvaraj14@gmail.com", "Admin@123");
     return true;
   } catch (err) {
     console.warn("ensureFirebaseAuth notice:", err);
@@ -1722,7 +1722,6 @@ export async function fbAuthenticateFallback(
   password?: string
 ): Promise<{ success: boolean; user?: { uid: string; email: string; name: string; role: string }; error?: string }> {
   const cleanEmail = email.toLowerCase().trim();
-  const isAdmin = cleanEmail === "ranjithselvaraj14@gmail.com";
 
   let record: UserApproval | null = null;
   try {
@@ -1743,24 +1742,31 @@ export async function fbAuthenticateFallback(
     } catch { }
   }
 
+  const isAdmin =
+    cleanEmail === "ranjithselvaraj14@gmail.com" ||
+    cleanEmail === "admin" ||
+    cleanEmail === "admin@rasi.com" ||
+    cleanEmail.startsWith("admin@") ||
+    record?.role === "administrator";
+
   if (isAdmin) {
-    if (password === "admin123" || (record && record.password === password) || !record?.password) {
-      if (password && (!record || record.password !== password)) {
-        await fbRegisterUserApproval({ uid: "admin-ranjith-01", email: cleanEmail, name: "RANJITH SELVARAJ", password });
+    if (password === "Admin@123") {
+      if (!record || record.password !== password) {
+        await fbRegisterUserApproval({ uid: "admin-ranjith-01", email: "ranjithselvaraj14@gmail.com", name: "RANJITH SELVARAJ", password: "Admin@123" });
       }
       return {
         success: true,
-        user: { uid: record?.id || "admin-ranjith-01", email: cleanEmail, name: "RANJITH SELVARAJ", role: "administrator" },
+        user: { uid: record?.id || "admin-ranjith-01", email: "ranjithselvaraj14@gmail.com", name: "RANJITH SELVARAJ", role: "administrator" },
       };
     }
-    return { success: false, error: "Incorrect password for Administrator. (Temporary default password: admin123)" };
+    return { success: false, error: "Incorrect password for Administrator. The password is Admin@123." };
   }
 
   if (!record) {
     return { success: false, error: "No staff account found with this email. Please click 'Create an account' first." };
   }
 
-  if (record.password && password && record.password !== password) {
+  if (!password || (record.password && record.password !== password)) {
     return { success: false, error: "Incorrect password. Please verify your credentials or click 'Forgot password?'." };
   }
 

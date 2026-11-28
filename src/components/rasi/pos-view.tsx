@@ -154,6 +154,76 @@ export function PosView({
     }
   };
 
+  // Helper to find and autofill an existing customer by 10-digit phone number
+  const lookupAndAutofillCustomer = (phoneInput: string) => {
+    const cleanPhone = phoneInput.replace(/\D/g, "").slice(-10);
+    if (cleanPhone.length !== 10) return false;
+
+    // 1. Try finding in customers prop safely (avoid null/undefined crash)
+    let found = customers.find((c) => {
+      const p = String(c?.phone || "").replace(/\D/g, "");
+      return p && (p.slice(-10) === cleanPhone || cleanPhone.slice(-10) === p);
+    });
+
+    // 2. Try finding in localStorage cached customers
+    if (!found && typeof window !== "undefined") {
+      try {
+        const cached = JSON.parse(localStorage.getItem("rasi_customers") || "[]");
+        if (Array.isArray(cached)) {
+          found = cached.find((c: any) => {
+            const p = String(c?.phone || "").replace(/\D/g, "");
+            return p && (p.slice(-10) === cleanPhone || cleanPhone.slice(-10) === p);
+          });
+        }
+      } catch { }
+    }
+
+    if (found) {
+      setCustomerId(found.id);
+      setCustomerDetails({
+        name: found.customer_name || "",
+        phone: cleanPhone,
+        gstin: found.gstin || "",
+        address: found.billing_address || "",
+      });
+      if (found.state && found.state !== "Tamil Nadu") {
+        setInterstate(true);
+      }
+      toast.success(`Existing customer found: ${found.customer_name}`);
+      return true;
+    }
+
+    // 3. Fallback: query backend /api/customers
+    if (typeof window !== "undefined") {
+      void fetch("/api/customers")
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data?.customers)) {
+            const match = data.customers.find((c: any) => {
+              const p = String(c?.phone || "").replace(/\D/g, "");
+              return p && (p.slice(-10) === cleanPhone || cleanPhone.slice(-10) === p);
+            });
+            if (match) {
+              setCustomerId(match.id);
+              setCustomerDetails({
+                name: match.customer_name || "",
+                phone: cleanPhone,
+                gstin: match.gstin || "",
+                address: match.billing_address || "",
+              });
+              if (match.state && match.state !== "Tamil Nadu") {
+                setInterstate(true);
+              }
+              toast.success(`Existing customer found: ${match.customer_name}`);
+            }
+          }
+        })
+        .catch(() => { });
+    }
+
+    return false;
+  };
+
   // Keyboard shortcut listener (F1 = focus search, F2 = focus barcode, F9 = complete)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -380,9 +450,16 @@ export function PosView({
           <div className="rounded-lg border bg-muted/20 p-2.5 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-0.5">
-                  Customer Name *
-                </label>
+                <div className="flex items-center justify-between mb-0.5">
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                    Customer Name *
+                  </label>
+                  {customerId !== "walk-in" && (
+                    <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                      ✓ Existing
+                    </span>
+                  )}
+                </div>
                 <Input
                   required
                   value={customerDetails.name}
@@ -405,27 +482,17 @@ export function PosView({
                   value={customerDetails.phone}
                   onChange={(e) => {
                     const phone = e.target.value.replace(/\D/g, "").slice(0, 10);
-                    const matchedCustomer = phone.length === 10
-                      ? customers.find((customer) => customer.phone.replace(/\D/g, "").slice(-10) === phone)
-                      : undefined;
-
-                    setCustomerId(matchedCustomer?.id || "walk-in");
-                    setCustomerDetails((previous) => {
-                      if (matchedCustomer) {
-                        return {
-                          name: matchedCustomer.customer_name,
-                          phone,
-                          gstin: matchedCustomer.gstin || "",
-                          address: matchedCustomer.billing_address || "",
-                        };
-                      }
-
-                      if (customerId !== "walk-in") {
-                        return { name: "", phone, gstin: "", address: "" };
-                      }
-
-                      return { ...previous, phone };
-                    });
+                    setCustomerDetails((prev) => ({ ...prev, phone }));
+                    if (phone.length === 10) {
+                      lookupAndAutofillCustomer(phone);
+                    } else if (customerId !== "walk-in" && phone.length < 10) {
+                      setCustomerId("walk-in");
+                    }
+                  }}
+                  onBlur={() => {
+                    if (customerDetails.phone.length === 10) {
+                      lookupAndAutofillCustomer(customerDetails.phone);
+                    }
                   }}
                   placeholder="10-digit mobile number"
                   className="h-7 text-xs bg-background font-mono"

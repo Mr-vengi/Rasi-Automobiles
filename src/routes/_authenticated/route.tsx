@@ -141,7 +141,7 @@ export const Route = createFileRoute("/_authenticated")({
               }
               localStorage.setItem("rasi_staff_session", JSON.stringify(parsed));
               if (!auth.currentUser) {
-                void signInWithEmailAndPassword(auth, "ranjithselvaraj14@gmail.com", "admin123").catch(() => { });
+                void signInWithEmailAndPassword(auth, "ranjithselvaraj14@gmail.com", "Admin@123").catch(() => { });
               }
               return { user: parsed as RasiSession };
             }

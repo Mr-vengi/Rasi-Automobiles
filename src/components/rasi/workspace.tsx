@@ -280,7 +280,7 @@ export function RasiWorkspace({ initialPage }: { initialPage?: Page } = {}) {
   const productsQuery = useQuery({ queryKey: rasiKeys.products, queryFn: loadProducts, enabled: has("products:read") });
   const categoriesQuery = useQuery({ queryKey: rasiKeys.categories, queryFn: loadCategories, enabled: has("products:read") });
   const brandsQuery = useQuery({ queryKey: rasiKeys.brands, queryFn: loadBrands, enabled: has("products:read") });
-  const customersQuery = useQuery({ queryKey: rasiKeys.customers, queryFn: loadCustomers, enabled: has("customers:read") });
+  const customersQuery = useQuery({ queryKey: rasiKeys.customers, queryFn: loadCustomers, enabled: has("customers:read") || has("pos:access") });
   const suppliersQuery = useQuery({ queryKey: rasiKeys.suppliers, queryFn: loadSuppliers, enabled: has("suppliers:read") });
   const salesQuery = useQuery({
     queryKey: rasiKeys.sales,
