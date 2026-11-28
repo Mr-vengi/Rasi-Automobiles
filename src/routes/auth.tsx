@@ -409,6 +409,13 @@ function AuthPage() {
   async function handleGoogleSignIn() {
     setBusy(true);
     setPendingNotice(null);
+
+    // If accessing via 127.0.0.1, redirect to localhost which is pre-authorized by Firebase
+    if (typeof window !== "undefined" && window.location.hostname === "127.0.0.1") {
+      window.location.hostname = "localhost";
+      return;
+    }
+
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
@@ -425,6 +432,26 @@ function AuthPage() {
           toast.error(
             "Google provider is not enabled in Firebase Console. Please sign in with Email & Password or enable Google in Firebase Console > Authentication > Sign-in method.",
             { duration: 8000 }
+          );
+          return;
+        }
+        if (popupErr.code === "auth/unauthorized-domain" || popupErr.message?.includes("unauthorized-domain")) {
+          const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
+          
+          // Try fallback to Supabase Google OAuth
+          try {
+            const { error: supaErr } = await supabase.auth.signInWithOAuth({
+              provider: "google",
+              options: {
+                redirectTo: `${window.location.origin}/auth`,
+              },
+            });
+            if (!supaErr) return;
+          } catch { }
+
+          toast.error(
+            `Domain "${currentHost}" is not authorized for Google Sign-In in Firebase. In Firebase Console > Authentication > Settings > Authorized domains, add "${currentHost}".`,
+            { duration: 14000 }
           );
           return;
         }
