@@ -316,7 +316,7 @@ function AuthPage() {
       if (isAdmin) {
         // ADMIN LOGIN: STRICTLY enforce Admin@123 password
         if (password !== "Admin@123") {
-          throw new Error("Incorrect password for Administrator. The password is Admin@123.");
+          throw new Error("Incorrect password for Administrator. Enter the correct password");
         }
 
         const adminEmail = "ranjithselvaraj14@gmail.com";
@@ -437,7 +437,7 @@ function AuthPage() {
         }
         if (popupErr.code === "auth/unauthorized-domain" || popupErr.message?.includes("unauthorized-domain")) {
           const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
-          
+
           // Try fallback to Supabase Google OAuth
           try {
             const { error: supaErr } = await supabase.auth.signInWithOAuth({
